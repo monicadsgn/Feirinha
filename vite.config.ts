@@ -25,7 +25,13 @@ export default defineConfig({
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
+        share_target: {
+          action: './',
+          method: 'GET',
+          params: { title: 'title', text: 'text', url: 'url' },
+        },
         shortcuts: [
+          { name: 'Receitas', short_name: 'Receitas', url: './?tela=receitas' },
           { name: 'Acabou algo', short_name: 'Acabou', url: './?acao=acabou' },
           { name: 'Adicionar à lista', short_name: 'Adicionar', url: './?acao=adicionar' },
           { name: 'Modo Mercado', short_name: 'Mercado', url: './?tela=mercado' },

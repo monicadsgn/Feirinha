@@ -47,6 +47,8 @@ export interface Item extends Base {
   everyMonths?: number
   /** Tamanho/tipo, pra não ter dúvida ("garrafa de 1 L", "da marca X"). */
   note?: string
+  /** Carnes: quantas refeições do casal 1 unidade (kg) rende. Aprendido com o uso. */
+  mealsPerUnit?: number
   shopId: Id
   /** Itens que costumam andar juntos (macarrão → molho). */
   pairs: Id[]
@@ -99,8 +101,24 @@ export interface Settings {
   checkWeekday?: number
   /** Versão do catálogo usada no cadastro (2 = montado com as listas da casa). */
   catalogVersion?: number
+  /** Quantas refeições com carne a casa faz por semana (almoço + jantar). */
+  mealsPerWeek?: number
   /** Última mudança nos ajustes compartilhados (tudo menos `me`). */
   updatedAt?: number
+}
+
+export type Meal = 'cafe' | 'almoco' | 'jantar'
+
+/** Receita salva pela casa (link do Instagram/TikTok, legenda colada…). */
+export interface SavedRecipe extends Base {
+  name: string
+  url?: string
+  /** Texto colado (legenda, ingredientes, modo de preparo). */
+  text?: string
+  /** Itens da despensa que a receita usa. */
+  uses: Id[]
+  meals: Meal[]
+  addedBy: string
 }
 
 export interface DB {
@@ -109,5 +127,6 @@ export interface DB {
   shops: Record<Id, Shop>
   list: Record<Id, ListEntry>
   trips: Record<Id, Trip>
+  recipes: Record<Id, SavedRecipe>
   settings: Settings
 }

@@ -11,15 +11,17 @@ import { Casa } from './screens/Casa'
 import { Lista } from './screens/Lista'
 import { Mercado } from './screens/Mercado'
 import { Onboarding } from './screens/Onboarding'
+import { Receitas } from './screens/Receitas'
 import { Resumo } from './screens/Resumo'
 import { Review } from './screens/Review'
 
-type Tab = 'casa' | 'lista' | 'mercado' | 'resumo'
+type Tab = 'casa' | 'lista' | 'mercado' | 'receitas' | 'resumo'
 
 const TABS: { id: Tab; label: string; ico: string }[] = [
   { id: 'casa', label: 'Despensa', ico: '🏠' },
   { id: 'lista', label: 'Lista', ico: '📝' },
   { id: 'mercado', label: 'Mercado', ico: '🛒' },
+  { id: 'receitas', label: 'Receitas', ico: '🍳' },
   { id: 'resumo', label: 'Resumo', ico: '📊' },
 ]
 
@@ -30,6 +32,7 @@ export function App() {
   const [item, setItem] = useState<Id | null>(null)
   const [review, setReview] = useState(false)
   const [settings, setSettings] = useState(false)
+  const [share, setShare] = useState<{ title?: string; text?: string; url?: string } | null>(null)
   const [joining, setJoining] = useState(() => syncAvailable && new URLSearchParams(location.search).has('casa'))
 
   // Atalhos por link: ?acao=acabou | ?acao=adicionar | ?tela=mercado | ?add=detergente
@@ -40,6 +43,11 @@ export function App() {
     const tela = p.get('tela') as Tab | null
     const add = p.get('add')
     const casa = p.get('casa')
+    // "Compartilhar → Feirinha" (Android): chega título, texto e link do post
+    if (p.has('text') || p.has('url') || p.has('title')) {
+      setShare({ title: p.get('title') ?? undefined, text: p.get('text') ?? undefined, url: p.get('url') ?? undefined })
+      setTab('receitas')
+    }
     if (casa && syncAvailable) {
       joinCasa(casa)
         .then(() => toast('Pronto! Agora a despensa e a lista são as mesmas nos dois celulares 🧺'))
@@ -100,9 +108,10 @@ export function App() {
       )}
       {tab === 'lista' && <Lista goMarket={() => setTab('mercado')} openReview={() => setReview(true)} openItem={setItem} />}
       {tab === 'mercado' && <Mercado onFinished={() => setTab('resumo')} />}
+      {tab === 'receitas' && <Receitas share={share} onShareHandled={() => setShare(null)} />}
       {tab === 'resumo' && <Resumo openItem={setItem} />}
 
-      {tab !== 'mercado' && (
+      {tab !== 'mercado' && tab !== 'receitas' && (
         <button className="fab" onClick={() => setQuick('lista')}>
           <span className="plus">＋</span> Adicionar
         </button>

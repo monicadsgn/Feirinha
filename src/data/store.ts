@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { CATALOG_V3_NEW, CATALOG_V3_REMOVED, CATALOG_V3_RENAMES, DEFAULT_AISLES, SEED_ITEMS, SEED_SHOPS, guessCategory, type SeedItem } from './catalog'
 import { estimateStock, suggestBuyQty } from './logic'
 import { normalize } from './format'
-import type { DB, EntryReason, Id, Item, ListEntry, Settings, Shop, Trip, TripKind, TripLine } from './types'
+import type { DB, EntryReason, Id, Item, ListEntry, SavedRecipe, Settings, Shop, Trip, TripKind, TripLine } from './types'
 
 const KEY = 'feirinha:v1'
 export const CATALOG_VERSION = 3
@@ -21,6 +21,7 @@ function emptyDB(): DB {
     shops,
     list: {},
     trips: {},
+    recipes: {},
     settings: { me: '', people: [], ticketMonthly: 0, ticketDay: 5, onboarded: false },
   }
 }
@@ -553,6 +554,50 @@ export function runMigrations() {
     if (q && q.name === 'Sacolão / feira') Object.assign(q, { name: 'Quitanda / sacolão', updatedAt: now })
     d.settings.catalogVersion = 3
   })
+}
+
+/** Garante que um item do catálogo exista na despensa (pra pôr na lista a partir de uma receita). */
+export function ensureSeedItem(key: string): Id | null {
+  const sd = SEED_ITEMS.find((x) => x.key === key)
+  const cur = db.items[key]
+  if (cur && !cur.deleted) return key
+  if (!sd) return null
+  commit((d) => {
+    d.items[key] = seedToItem(sd, new Set(Object.keys(d.items)), Date.now())
+  })
+  return key
+}
+
+// ---------- Receitas salvas ----------
+
+export function saveRecipe(r: Partial<SavedRecipe> & { name: string }): Id {
+  const id = r.id ?? uid()
+  commit((d) => {
+    const prev = d.recipes[id]
+    const base: SavedRecipe = prev ?? { id, name: r.name, uses: [], meals: [], addedBy: d.settings.me, updatedAt: 0 }
+    d.recipes[id] = { ...base, ...r, id, updatedAt: Date.now() }
+  })
+  return id
+}
+
+export function deleteRecipe(id: Id) {
+  commit((d) => {
+    const r = d.recipes[id]
+    if (r) Object.assign(r, { deleted: true, updatedAt: Date.now() })
+  })
+}
+
+/** Acha na despensa os itens citados num texto de receita (um por linha ou separados por vírgula). */
+export function matchIngredients(text: string): Id[] {
+  const ids = new Set<Id>()
+  for (const raw of text.split(/\r?\n|,|;|•/)) {
+    const line = raw.replace(/\d+\s*(g|kg|ml|l|x[ií]caras?|colher(es)?( de sopa| de chá)?|pitadas?|dentes?)\b/gi, ' ').trim()
+    if (line.length < 3 || line.length > 80) continue
+    const p = parseLine(line)
+    const it = p && findItemByName(db, p.name)
+    if (it) ids.add(it.id)
+  }
+  return [...ids]
 }
 
 export function exportJSON(): string {

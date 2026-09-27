@@ -15,8 +15,8 @@ import type { DB, Settings } from './types'
 const URL_ = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const KEY = import.meta.env.VITE_SUPABASE_KEY as string | undefined
 
-type Kind = 'items' | 'shops' | 'list' | 'trips' | 'settings'
-const KINDS: Exclude<Kind, 'settings'>[] = ['items', 'shops', 'list', 'trips']
+type Kind = 'items' | 'shops' | 'list' | 'trips' | 'recipes' | 'settings'
+const KINDS: Exclude<Kind, 'settings'>[] = ['items', 'shops', 'list', 'trips', 'recipes']
 
 interface Row {
   kind: Kind

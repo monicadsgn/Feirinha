@@ -286,3 +286,65 @@ export function itemStats(db: DB, item: Item): ItemStat {
     priceChange,
   }
 }
+
+// ---------- Porções de carne ----------
+
+/** Carnes que contam como refeição (bacon é tempero, não prato). */
+export function isProtein(item: Item): boolean {
+  return !item.deleted && ((item.category === 'acougue' && item.id !== 'bacon') || item.id === 'sardinha')
+}
+
+/** Refeições do casal por unidade comprada. Sem balança: começa em 4 por kg (250 g cada) e a casa ajusta. */
+export function mealsPerUnit(item: Item): number {
+  if (item.mealsPerUnit) return item.mealsPerUnit
+  if (item.unit === 'kg') return item.id === 'carne-sol' ? 6 : 4
+  if (item.unit === 'lata') return 1
+  return 2
+}
+
+export interface ProteinRow {
+  item: Item
+  /** Em casa agora (estimado). */
+  home: number
+  /** Na lista pra comprar. */
+  toBuy: number
+  meals: number
+  perMeal: number | null
+}
+
+export function proteinPlan(db: DB): { rows: ProteinRow[]; meals: number; target: number } {
+  const inList = new Map<Id, number>()
+  for (const e of Object.values(db.list)) if (!e.deleted) inList.set(e.itemId, (inList.get(e.itemId) ?? 0) + e.qty)
+  const rows: ProteinRow[] = []
+  for (const it of Object.values(db.items)) {
+    if (!isProtein(it)) continue
+    const home = estimateStock(db, it) ?? 0
+    const toBuy = inList.get(it.id) ?? 0
+    const per = mealsPerUnit(it)
+    const price = lastPrice(db, it.id)
+    rows.push({ item: it, home, toBuy, meals: (home + toBuy) * per, perMeal: price != null ? price / per : null })
+  }
+  rows.sort((a, b) => b.meals - a.meals || a.item.name.localeCompare(b.item.name))
+  const weekly = db.settings.mealsPerWeek ?? 10
+  const days = Math.max(1, daysUntilFeira(db.settings.ticketDay))
+  return { rows, meals: rows.reduce((s, r) => s + r.meals, 0), target: Math.round((weekly / 7) * days) }
+}
+
+// ---------- Receitas: dá pra fazer? ----------
+
+/** Tem em casa (ou vai comprar): não acabou pela estimativa, ou está na lista. */
+export function haveItem(db: DB, id: Id): boolean {
+  const it = db.items[id]
+  if (!it || it.deleted) return false
+  if (listItemIds(db).has(id)) return true
+  return stockInfo(db, it).status !== 'acabou'
+}
+
+export function recipeStatus(db: DB, uses: Id[], protein?: Id[]): { missing: Id[]; proteinOk: boolean; unknown: Id[] } {
+  const prot = new Set(protein ?? [])
+  const proteinOk = !protein?.length || protein.some((p) => haveItem(db, p))
+  const rest = uses.filter((u) => !prot.has(u))
+  const unknown = rest.filter((u) => !db.items[u] || db.items[u]!.deleted)
+  const missing = rest.filter((u) => db.items[u] && !db.items[u]!.deleted && !haveItem(db, u))
+  return { missing, proteinOk, unknown }
+}

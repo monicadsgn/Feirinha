@@ -7,7 +7,7 @@ create sequence if not exists public.feirinha_rev;
 
 create table if not exists public.feirinha_records (
   casa text not null,
-  kind text not null check (kind in ('items', 'shops', 'list', 'trips', 'settings')),
+  kind text not null check (kind in ('items', 'shops', 'list', 'trips', 'recipes', 'settings')),
   id text not null,
   data jsonb not null,
   updated_at bigint not null,

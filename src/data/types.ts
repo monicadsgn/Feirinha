@@ -99,6 +99,8 @@ export interface Settings {
   checkWeekday?: number
   /** Versão do catálogo usada no cadastro (2 = montado com as listas da casa). */
   catalogVersion?: number
+  /** Última mudança nos ajustes compartilhados (tudo menos `me`). */
+  updatedAt?: number
 }
 
 export interface DB {

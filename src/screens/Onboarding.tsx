@@ -84,10 +84,11 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       {step === 1 && (
         <>
           <div className="card">
-            <h2>O que vocês compram?</h2>
+            <h2>O que entra na casa de vocês?</h2>
             <p className="muted small" style={{ marginBottom: 0 }}>
-              Já marquei o que apareceu nas suas listas de maio, julho e agosto, com a quantidade média. Desmarque o que não faz mais
-              sentido. Embaixo de cada grupo tem o que costuma faltar e ideias pra variar, desmarcados.
+              Não é a lista da próxima feira: é o cadastro de tudo que vocês costumam comprar, seja todo mês ou de vez em quando (sal, açúcar…).
+              A lista da feira sai depois, na revisão, com o que estiver acabando. Já marquei o que apareceu nas suas listas de maio, julho e
+              agosto, com a quantidade média. Desmarque o que vocês não compram mais.
             </p>
           </div>
           {byCat.map(([cat, items]) => {

@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { ItemEditor } from './components/ItemEditor'
 import { QuickAdd, suggestPair, type QuickMode } from './components/QuickAdd'
 import { ConfirmHost, Toasts, confirmAction, toast } from './components/ui'
-import { activeTrip, addItem, addToList, findItemByName, getDB, redoOnboarding, useDB } from './data/store'
+import { activeTrip, addItem, addToList, findItemByName, getDB, redoOnboarding, updateSettings, useDB } from './data/store'
 import { listItemIds } from './data/logic'
+import { joinCasa, syncAvailable } from './data/sync'
 import type { Id } from './data/types'
 import { Ajustes } from './screens/Ajustes'
 import { Casa } from './screens/Casa'
@@ -29,6 +30,7 @@ export function App() {
   const [item, setItem] = useState<Id | null>(null)
   const [review, setReview] = useState(false)
   const [settings, setSettings] = useState(false)
+  const [joining, setJoining] = useState(() => syncAvailable && new URLSearchParams(location.search).has('casa'))
 
   // Atalhos por link: ?acao=acabou | ?acao=adicionar | ?tela=mercado | ?add=detergente
   useEffect(() => {
@@ -37,6 +39,12 @@ export function App() {
     const acao = p.get('acao')
     const tela = p.get('tela') as Tab | null
     const add = p.get('add')
+    const casa = p.get('casa')
+    if (casa && syncAvailable) {
+      joinCasa(casa)
+        .then(() => toast('Pronto! Agora a despensa e a lista são as mesmas nos dois celulares 🧺'))
+        .finally(() => setJoining(false))
+    }
     if (acao === 'acabou') setQuick('acabou')
     if (acao === 'adicionar') setQuick('lista')
     if (tela && TABS.some((t) => t.id === tela)) setTab(tela)
@@ -52,6 +60,16 @@ export function App() {
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [tab])
+
+  if (joining)
+    return (
+      <div className="app">
+        <div className="empty" style={{ paddingTop: 120 }}>
+          <div className="big">🧺</div>
+          <p>Entrando na casa…</p>
+        </div>
+      </div>
+    )
 
   if (!db.settings.onboarded)
     return (
@@ -115,8 +133,48 @@ export function App() {
         />
       )}
       {settings && <Ajustes onClose={() => setSettings(false)} />}
+      {!db.settings.me && <WhoAmI people={db.settings.people} />}
       <Toasts />
       <ConfirmHost />
+    </div>
+  )
+}
+
+/** Quem entrou pelo convite ainda não disse o nome neste celular. */
+function WhoAmI({ people }: { people: string[] }) {
+  const [name, setName] = useState('')
+  const pick = (n: string) => {
+    const me = n.trim()
+    if (!me) return
+    updateSettings({ me, people: people.includes(me) ? people : [...people, me] })
+  }
+  return (
+    <div className="backdrop" style={{ zIndex: 70, alignItems: 'center', padding: 16 }}>
+      <div className="card stack" style={{ maxWidth: 400, width: '100%' }}>
+        <h2>Quem está usando este celular?</h2>
+        <p className="small muted" style={{ margin: 0 }}>
+          Assim a lista mostra quem adicionou cada item.
+        </p>
+        <div className="row wrap">
+          {people.map((p) => (
+            <button key={p} className="btn primary grow" onClick={() => pick(p)}>
+              {p}
+            </button>
+          ))}
+        </div>
+        <form
+          className="row"
+          onSubmit={(e) => {
+            e.preventDefault()
+            pick(name)
+          }}
+        >
+          <input id="whoami" placeholder="Outro nome" value={name} onChange={(e) => setName(e.target.value)} />
+          <button className="btn" type="submit">
+            OK
+          </button>
+        </form>
+      </div>
     </div>
   )
 }

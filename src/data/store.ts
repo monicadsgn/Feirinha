@@ -73,7 +73,34 @@ export function getDB(): DB {
 }
 
 /** Toda escrita passa por aqui: copia, muda, salva, avisa a tela. */
+type CommitListener = (prev: DB, next: DB) => void
+const commitListeners = new Set<CommitListener>()
+
+/** Avisado a cada mudança feita neste celular (a sincronização usa pra saber o que enviar). */
+export function onCommit(l: CommitListener) {
+  commitListeners.add(l)
+  return () => commitListeners.delete(l)
+}
+
+/** Ajustes que valem pra casa toda (o nome de quem usa o celular fica só nele). */
+export function sharedSettings(s: Settings): Omit<Settings, 'me' | 'updatedAt'> {
+  const { me: _me, updatedAt: _u, ...rest } = s
+  return rest
+}
+
 function commit(mutate: (d: DB) => void) {
+  const prev = db
+  const next = structuredClone(db)
+  mutate(next)
+  if (JSON.stringify(sharedSettings(prev.settings)) !== JSON.stringify(sharedSettings(next.settings))) next.settings.updatedAt = Date.now()
+  db = next
+  save()
+  emit()
+  for (const l of commitListeners) l(prev, next)
+}
+
+/** Mudanças que chegaram de outro celular: salva e mostra, sem reenviar. */
+export function applyRemote(mutate: (d: DB) => void) {
   const next = structuredClone(db)
   mutate(next)
   db = next

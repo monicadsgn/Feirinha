@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { Sheet, confirmAction, embedded, toast } from '../components/ui'
+import { createCasa, inviteLink, leaveCasa, syncAvailable, syncNow, useSync } from '../data/sync'
 import { WEEKDAYS, calendarEvents, googleCalendarUrl, icsFile } from '../data/reminders'
 import { deleteShop, exportJSON, importJSON, resetAll, updateSettings, upsertShop, useDB } from '../data/store'
 
@@ -9,6 +10,17 @@ export function Ajustes({ onClose }: { onClose: () => void }) {
   const [ticket, setTicket] = useState(s.ticketMonthly ? s.ticketMonthly.toFixed(2).replace('.', ',') : '')
   const file = useRef<HTMLInputElement>(null)
   const shops = Object.values(db.shops).filter((x) => !x.deleted)
+  const sync = useSync()
+  const link = sync.casa ? inviteLink() : null
+  const other = s.people.find((p) => p !== s.me) ?? 'a outra pessoa'
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link!)
+      toast('Link copiado ✓')
+    } catch {
+      toast('Não deu pra copiar. Segure o link pra copiar.')
+    }
+  }
 
   const download = (content: string, name: string, type: string) => {
     const a = document.createElement('a')
@@ -76,6 +88,68 @@ export function Ajustes({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
+        {syncAvailable && (
+          <div className="card stack">
+            <h3>Compartilhar a casa</h3>
+            {!sync.casa ? (
+              <>
+                <p className="small muted" style={{ margin: 0 }}>
+                  Cria um convite pra {other} usar a mesma despensa, lista e resumo, cada um no seu celular. O que um marca, o outro vê em
+                  segundos.
+                </p>
+                <button className="btn sm primary" disabled={sync.busy} onClick={() => void createCasa()}>
+                  Criar convite
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="small muted" style={{ margin: 0 }}>
+                  Mande este link pra {other} abrir no celular. Quem tiver o link entra na casa, então mande só pra quem mora com você.
+                </p>
+                <code className="small" style={{ wordBreak: 'break-all', background: 'var(--surface-2)', padding: 8, borderRadius: 8, userSelect: 'all' }}>
+                  {link}
+                </code>
+                <div className="row">
+                  <button className="btn sm grow" onClick={copy}>
+                    Copiar link
+                  </button>
+                  <a
+                    className="btn sm grow primary"
+                    style={{ textDecoration: 'none' }}
+                    href={`https://wa.me/?text=${encodeURIComponent(`Entra na nossa Feirinha 🧺 ${link}`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    WhatsApp
+                  </a>
+                </div>
+                <div className="row between small">
+                  <span className="muted">
+                    {sync.error ??
+                      (sync.busy
+                        ? 'Sincronizando…'
+                        : sync.pending.length
+                          ? `${sync.pending.length} mudanças esperando pra subir`
+                          : sync.lastOk
+                            ? `Tudo sincronizado · ${new Date(sync.lastOk).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+                            : 'Ainda não sincronizou')}
+                  </span>
+                  <button className="btn sm ghost" onClick={() => void syncNow()}>
+                    Sincronizar
+                  </button>
+                </div>
+                <button
+                  className="btn sm ghost"
+                  style={{ color: 'var(--accent)' }}
+                  onClick={() => confirmAction('Sair da casa? Este celular para de sincronizar e fica com uma cópia do que tem agora.', 'Sair', leaveCasa)}
+                >
+                  Sair da casa
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         <div className="card stack">
           <h3>Lugares onde compram</h3>
           {shops.map((sh) => (
@@ -137,7 +211,7 @@ export function Ajustes({ onClose }: { onClose: () => void }) {
             </p>
           )}
           <p className="small muted" style={{ margin: 0 }} hidden={embedded}>
-            Por enquanto tudo fica salvo neste celular. Faça um backup de vez em quando (ou antes de trocar de celular).
+            {sync.casa ? 'Tudo fica salvo neste celular e na nuvem da casa.' : 'Por enquanto tudo fica salvo neste celular.'} Faça um backup de vez em quando (ou antes de trocar de celular).
           </p>
           <div className="row" hidden={embedded}>
             <button className="btn sm grow" onClick={backup}>

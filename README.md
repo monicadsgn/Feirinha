@@ -22,10 +22,21 @@ npm run dev      # desenvolvimento
 npm run build    # gera dist/ (site estático + service worker)
 ```
 
-Os dados ficam no navegador (localStorage), e dá pra fazer backup em Ajustes. Todo registro já tem `id` + `updatedAt` para a sincronização entre os dois celulares, que é o próximo passo.
+No ar em **https://feirinha-six.vercel.app** (Vercel, deploy automático a cada push na branch principal).
+
+## Lista compartilhada
+
+Os dados ficam no navegador e, quando a casa é criada em Ajustes → Compartilhar a casa, também num Supabase. O convite é um link com um código secreto (`?casa=…`); quem abre entra na mesma casa.
+
+Para ligar:
+
+1. Rodar `supabase/feirinha.sql` no projeto (cria só `feirinha_records` e as funções `feirinha_push`/`feirinha_pull`).
+2. Definir na Vercel `VITE_SUPABASE_URL` e `VITE_SUPABASE_KEY` (chave pública/anon) e fazer um novo deploy.
+
+Sem essas variáveis o app funciona igual, só sem a parte de compartilhar.
 
 ## Próximos passos
 
-1. Sincronizar entre os celulares do casal (Supabase no plano grátis).
-2. Receitas de café da manhã e jantar com o que foi comprado.
+1. Porções do mês (quantas refeições a carne comprada rende) e ideias de receita por corte.
+2. Banco de receitas salvas do Instagram/TikTok.
 3. Ler o QR code da nota fiscal (NFC-e) para preencher os preços sozinho.

@@ -93,3 +93,65 @@ export function Toasts() {
     </div>
   )
 }
+
+// ---------- Confirmação (o confirm() do navegador não funciona em todo lugar) ----------
+
+interface Ask {
+  text: string
+  ok: string
+  run: () => void
+}
+
+let ask: Ask | null = null
+const askSubs = new Set<() => void>()
+
+export function confirmAction(text: string, ok: string, run: () => void) {
+  ask = { text, ok, run }
+  askSubs.forEach((s) => s())
+}
+
+function closeAsk() {
+  ask = null
+  askSubs.forEach((s) => s())
+}
+
+export function ConfirmHost() {
+  const a = useSyncExternalStore(
+    (s) => {
+      askSubs.add(s)
+      return () => askSubs.delete(s)
+    },
+    () => ask,
+  )
+  if (!a) return null
+  return (
+    <div className="backdrop" style={{ zIndex: 70, alignItems: 'center', padding: 16 }} onClick={closeAsk}>
+      <div className="card stack" style={{ maxWidth: 400, width: '100%' }} onClick={(e) => e.stopPropagation()} role="alertdialog">
+        <div style={{ fontWeight: 700 }}>{a.text}</div>
+        <div className="row">
+          <button className="btn grow" onClick={closeAsk}>
+            Voltar
+          </button>
+          <button
+            className="btn accent grow"
+            onClick={() => {
+              a.run()
+              closeAsk()
+            }}
+          >
+            {a.ok}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** true quando o app está aberto dentro de outra página (ex.: link de teste do Claude). */
+export const embedded = (() => {
+  try {
+    return window.self !== window.top
+  } catch {
+    return true
+  }
+})()

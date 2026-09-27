@@ -4,7 +4,7 @@ import { brl, dateLabel, qtyLabel } from '../data/format'
 import { itemStats, purchasesOf, stockInfo } from '../data/logic'
 import { deleteItem, setStock, updateItem, useDB } from '../data/store'
 import type { CategoryId, Id, PlaceId, Unit } from '../data/types'
-import { Sheet, Stepper } from './ui'
+import { Sheet, Stepper, confirmAction } from './ui'
 
 export function ItemEditor({ itemId, onClose }: { itemId: Id; onClose: () => void }) {
   const db = useDB()
@@ -181,10 +181,10 @@ export function ItemEditor({ itemId, onClose }: { itemId: Id; onClose: () => voi
             className="btn ghost"
             style={{ color: 'var(--accent)' }}
             onClick={() => {
-              if (confirm(`Tirar “${item.name}” da despensa? O histórico de compras continua no resumo.`)) {
+              confirmAction(`Tirar “${item.name}” da despensa? O histórico de compras continua no resumo.`, 'Tirar', () => {
                 deleteItem(item.id)
                 onClose()
-              }
+              })
             }}
           >
             Não compro mais

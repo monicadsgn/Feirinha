@@ -3,6 +3,7 @@ import { CATEGORIES } from '../data/catalog'
 import { brl, dateLabel, monthLabel, qtyLabel } from '../data/format'
 import { cycleStart, finishedTrips, itemStats, monthlyStats, tripTotal } from '../data/logic'
 import { deleteTrip, useDB } from '../data/store'
+import { confirmAction } from '../components/ui'
 import type { CategoryId, Id } from '../data/types'
 
 type Sort = 'gasto' | 'frequencia' | 'preco'
@@ -247,7 +248,7 @@ export function Resumo({ openItem }: { openItem: (id: Id) => void }) {
                       <span className="muted">
                         Ticket {brl(t.paidTicket)} · dinheiro {brl(Math.max(0, tt.total - t.paidTicket))}
                       </span>
-                      <button className="btn sm ghost" style={{ color: 'var(--accent)' }} onClick={() => confirm('Apagar essa compra do histórico?') && deleteTrip(t.id)}>
+                      <button className="btn sm ghost" style={{ color: 'var(--accent)' }} onClick={() => confirmAction('Apagar essa compra do histórico?', 'Apagar', () => deleteTrip(t.id))}>
                         Apagar
                       </button>
                     </div>

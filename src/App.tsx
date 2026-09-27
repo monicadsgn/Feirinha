@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ItemEditor } from './components/ItemEditor'
 import { QuickAdd, suggestPair, type QuickMode } from './components/QuickAdd'
-import { Toasts, toast } from './components/ui'
+import { ConfirmHost, Toasts, toast } from './components/ui'
 import { activeTrip, addItem, addToList, findItemByName, getDB, useDB } from './data/store'
 import { listItemIds } from './data/logic'
 import type { Id } from './data/types'
@@ -66,7 +66,11 @@ export function App() {
 
   return (
     <div className="app">
-      {tab === 'casa' && <Casa openQuick={setQuick} openItem={setItem} openReview={() => setReview(true)} openSettings={() => setSettings(true)} />}
+      {tab === 'casa' && (
+        <Casa openQuick={setQuick} openItem={setItem} openReview={() => setReview(true)} openSettings={() => setSettings(true)}
+          onReminder={(a) => (a === 'review' ? setReview(true) : a === 'acabou' ? setQuick('acabou') : setTab(a))}
+        />
+      )}
       {tab === 'lista' && <Lista goMarket={() => setTab('mercado')} openReview={() => setReview(true)} openItem={setItem} />}
       {tab === 'mercado' && <Mercado onFinished={() => setTab('resumo')} />}
       {tab === 'resumo' && <Resumo openItem={setItem} />}
@@ -103,6 +107,7 @@ export function App() {
       )}
       {settings && <Ajustes onClose={() => setSettings(false)} />}
       <Toasts />
+      <ConfirmHost />
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { PriceSheet } from '../components/PriceSheet'
 import { QuickAdd } from '../components/QuickAdd'
 import { SwipeRow } from '../components/SwipeRow'
-import { Sheet, toast } from '../components/ui'
+import { Sheet, confirmAction, toast } from '../components/ui'
 import { CATEGORIES } from '../data/catalog'
 import { brl, qtyLabel } from '../data/format'
 import { forgotten, lastPrice, listItemIds, ticketLeft, tripTotal } from '../data/logic'
@@ -247,7 +247,7 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
       <button
         className="btn ghost block sm"
         style={{ marginTop: 8 }}
-        onClick={() => confirm('Cancelar essa compra? Nada do que foi marcado será salvo.') && cancelTrip(trip.id)}
+        onClick={() => confirmAction('Cancelar essa compra? Nada do que foi marcado será salvo.', 'Cancelar compra', () => cancelTrip(trip.id))}
       >
         Cancelar compra
       </button>

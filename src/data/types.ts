@@ -89,6 +89,10 @@ export interface Settings {
   /** Dia do mês em que o ticket cai (e a feira costuma acontecer). */
   ticketDay: number
   onboarded: boolean
+  /** Última revisão completa da despensa. */
+  lastReviewAt?: number
+  /** Dia da semana do lembrete "algo acabou?" (0 = domingo). */
+  checkWeekday?: number
 }
 
 export interface DB {

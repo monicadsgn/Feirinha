@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
-import { Sheet, toast } from '../components/ui'
+import { Sheet, confirmAction, embedded, toast } from '../components/ui'
+import { WEEKDAYS, calendarEvents, googleCalendarUrl, icsFile } from '../data/reminders'
 import { deleteShop, exportJSON, importJSON, resetAll, updateSettings, upsertShop, useDB } from '../data/store'
 
 export function Ajustes({ onClose }: { onClose: () => void }) {
@@ -9,14 +10,16 @@ export function Ajustes({ onClose }: { onClose: () => void }) {
   const file = useRef<HTMLInputElement>(null)
   const shops = Object.values(db.shops).filter((x) => !x.deleted)
 
-  const backup = () => {
-    const blob = new Blob([exportJSON()], { type: 'application/json' })
+  const download = (content: string, name: string, type: string) => {
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `feirinha-${new Date().toISOString().slice(0, 10)}.json`
+    a.href = URL.createObjectURL(new Blob([content], { type }))
+    a.download = name
     a.click()
-    URL.revokeObjectURL(a.href)
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
   }
+  const backup = () => download(exportJSON(), `feirinha-${new Date().toISOString().slice(0, 10)}.json`, 'application/json')
+  const appUrl = location.origin + location.pathname
+  const events = calendarEvents(db, appUrl)
 
   return (
     <Sheet onClose={onClose}>
@@ -80,7 +83,7 @@ export function Ajustes({ onClose }: { onClose: () => void }) {
               <input style={{ width: 56, textAlign: 'center' }} defaultValue={sh.emoji} onBlur={(e) => upsertShop({ id: sh.id, emoji: e.target.value || '🛍️' })} />
               <input defaultValue={sh.name} onBlur={(e) => e.target.value.trim() && upsertShop({ id: sh.id, name: e.target.value.trim() })} />
               {shops.length > 1 && (
-                <button className="icon-btn" aria-label="Remover" onClick={() => confirm(`Remover ${sh.name}?`) && deleteShop(sh.id)}>
+                <button className="icon-btn" aria-label="Remover" onClick={() => confirmAction(`Remover ${sh.name}?`, 'Remover', () => deleteShop(sh.id))}>
                   ✕
                 </button>
               )}
@@ -92,11 +95,51 @@ export function Ajustes({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="card stack">
-          <h3>Seus dados</h3>
+          <h3>Lembretes</h3>
           <p className="small muted" style={{ margin: 0 }}>
+            Coloque 2 lembretes com alarme no calendário do celular: um na véspera da feira (dia {s.ticketDay === 1 ? 'último do mês' : s.ticketDay - 1}, às
+            19h) pra revisar a despensa, e um toda semana pra marcar o que acabou. Quando abrir o app, os avisos também aparecem no topo da
+            Despensa.
+          </p>
+          <label className="field">
+            <span>Lembrete semanal “acabou algo?”</span>
+            <select value={s.checkWeekday ?? 0} onChange={(e) => updateSettings({ checkWeekday: parseInt(e.target.value) })}>
+              {WEEKDAYS.map((w, i) => (
+                <option key={i} value={i}>
+                  {i === 0 || i === 6 ? 'todo' : 'toda'} {w}, às 10h
+                </option>
+              ))}
+            </select>
+          </label>
+          {!embedded && (
+            <>
+              <button className="btn sm primary" onClick={() => download(icsFile(events), 'feirinha-lembretes.ics', 'text/calendar')}>
+                📅 Colocar no calendário do celular
+              </button>
+              <div className="small muted">Ou direto no Google Agenda:</div>
+            </>
+          )}
+          {embedded && <div className="small muted">Neste link de teste, só dá pra usar o Google Agenda. No app instalado também sai o arquivo pro calendário do iPhone.</div>}
+          <div className="row">
+            {events.map((e, i) => (
+              <a key={i} className="btn sm grow" href={googleCalendarUrl(e)} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                {i === 0 ? 'Véspera da feira' : 'Semanal'}
+              </a>
+            ))}
+          </div>
+        </div>
+
+        <div className="card stack">
+          <h3>Seus dados</h3>
+          {embedded && (
+            <p className="small muted" style={{ margin: 0 }}>
+              Este é o link de teste: os dados ficam só neste navegador e o backup em arquivo só funciona no app instalado.
+            </p>
+          )}
+          <p className="small muted" style={{ margin: 0 }} hidden={embedded}>
             Por enquanto tudo fica salvo neste celular. Faça um backup de vez em quando (ou antes de trocar de celular).
           </p>
-          <div className="row">
+          <div className="row" hidden={embedded}>
             <button className="btn sm grow" onClick={backup}>
               ⬇ Baixar backup
             </button>
@@ -123,13 +166,13 @@ export function Ajustes({ onClose }: { onClose: () => void }) {
           <button
             className="btn sm ghost"
             style={{ color: 'var(--accent)' }}
-            onClick={() => confirm('Apagar tudo e começar do zero?') && confirm('Tem certeza? Não dá pra desfazer.') && resetAll()}
+            onClick={() => confirmAction('Apagar tudo e começar do zero? Não dá pra desfazer.', 'Apagar tudo', resetAll)}
           >
             Apagar tudo
           </button>
         </div>
 
-        <div className="card stack">
+        <div className="card stack" hidden={embedded}>
           <h3>Atalhos</h3>
           <p className="small muted" style={{ margin: 0 }}>
             Instale o Feirinha na tela inicial (no navegador: “Adicionar à tela inicial”). No Android, segurar o ícone mostra “Acabou algo”,

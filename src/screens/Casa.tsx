@@ -4,6 +4,7 @@ import { toast } from '../components/ui'
 import { PLACES, PLACE_ORDER } from '../data/catalog'
 import { daysLabel, qtyLabel } from '../data/format'
 import { daysUntilFeira, listItemIds, stockInfo, type StockInfo } from '../data/logic'
+import { dismiss, reminders, type ReminderAction } from '../data/reminders'
 import { addToList, consumeOne, markOut, useDB } from '../data/store'
 import type { Id, Item, PlaceId } from '../data/types'
 
@@ -12,11 +13,14 @@ interface Props {
   openItem: (id: Id) => void
   openReview: () => void
   openSettings: () => void
+  onReminder: (a: ReminderAction) => void
 }
 
-export function Casa({ openQuick, openItem, openReview, openSettings }: Props) {
+export function Casa({ openQuick, openItem, openReview, openSettings, onReminder }: Props) {
   const db = useDB()
   const [place, setPlace] = useState<PlaceId | 'todos'>('todos')
+  const [, setTick] = useState(0)
+  const notes = reminders(db)
   const inList = listItemIds(db)
   const days = daysUntilFeira(db.settings.ticketDay)
 
@@ -47,6 +51,35 @@ export function Casa({ openQuick, openItem, openReview, openSettings }: Props) {
         </button>
       </div>
 
+      {notes.length > 0 && (
+        <div className="stack" style={{ gap: 8, marginBottom: 14 }}>
+          {notes.map((n) => (
+            <div key={n.key} className="card row" style={{ padding: '10px 12px', gap: 10 }}>
+              <span style={{ fontSize: 22 }}>{n.icon}</span>
+              <span className="grow small" style={{ fontWeight: 600 }}>
+                {n.text}
+              </span>
+              {n.action && (
+                <button className="btn sm primary" onClick={() => onReminder(n.action!.run)}>
+                  {n.action.label}
+                </button>
+              )}
+              <button
+                className="icon-btn"
+                style={{ width: 32, height: 32, fontSize: 14 }}
+                aria-label="Dispensar"
+                onClick={() => {
+                  dismiss(n.key)
+                  setTick((t) => t + 1)
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <button className="search" onClick={() => openQuick('acabou')}>
         <span style={{ fontSize: 20 }}>🫙</span>
         <span className="grow">Acabou alguma coisa?</span>
@@ -57,7 +90,7 @@ export function Casa({ openQuick, openItem, openReview, openSettings }: Props) {
         <div className="row between">
           <div>
             <div style={{ opacity: 0.85, fontWeight: 700 }}>Próxima feira {daysLabel(days)}</div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 600 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800 }}>
               {listCount} {listCount === 1 ? 'item' : 'itens'} na lista
             </div>
           </div>

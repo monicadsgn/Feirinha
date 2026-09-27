@@ -192,6 +192,7 @@ export function applyReview(answers: Record<Id, { answer: ReviewAnswer; buy: num
       Object.assign(touch(it), { stockQty: +stock.toFixed(2), stockAt: now })
       if (answer !== 'ok' && buy > 0) putInList(d, itemId, buy, answer === 'acabou' ? 'acabou' : 'revisao', true)
     }
+    d.settings.lastReviewAt = now
   })
 }
 

@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { CATALOG_V3_NEW, CATALOG_V3_REMOVED, CATALOG_V3_RENAMES, DEFAULT_AISLES, SEED_ITEMS, SEED_SHOPS, guessCategory, type SeedItem } from './catalog'
 import { estimateStock, suggestBuyQty } from './logic'
 import { normalize } from './format'
+import { prettyName } from './nfce'
 import type { DB, EntryReason, Id, Item, ListEntry, SavedRecipe, Settings, Shop, Trip, TripKind, TripLine } from './types'
 
 const KEY = 'feirinha:v1'
@@ -448,6 +449,72 @@ export function cancelTrip(tripId: Id) {
 
 export function deleteTrip(tripId: Id) {
   cancelTrip(tripId)
+}
+
+// ---------- Nota fiscal ----------
+
+export interface NotaLine {
+  productName: string
+  /** Item da despensa, 'novo' (cria com o nome da nota) ou 'ignorar'. */
+  target: Id | 'novo' | 'ignorar'
+  qty: number
+  notaUnit: string
+  total: number
+}
+
+/**
+ * Coloca os itens da nota numa compra: na compra em andamento (preenche os
+ * preços) ou numa compra nova já finalizada.
+ */
+export function importNota(lines: NotaLine[], dest: { tripId: Id } | { shopId: Id; when: number; paidTicket: number }): Id {
+  const tripId = 'tripId' in dest ? dest.tripId : uid()
+  commit((d) => {
+    const now = Date.now()
+    let trip = d.trips[tripId]
+    if (!trip) {
+      const nd = dest as { shopId: Id; when: number }
+      trip = { id: tripId, shopId: nd.shopId, kind: 'feira', startedAt: nd.when, finishedAt: null, lines: [], paidTicket: 0, updatedAt: now }
+      d.trips[tripId] = trip
+    }
+    // soma produtos repetidos que caem no mesmo item
+    const byItem = new Map<Id, { qty: number; total: number; kg: boolean }>()
+    for (const l of lines) {
+      if (l.target === 'ignorar') continue
+      let id = l.target
+      if (id === 'novo') {
+        const kg = /^(KG|KGS)$/i.test(l.notaUnit)
+        id = createItem(d, prettyName(l.productName), { unit: kg ? 'kg' : 'un', defaultQty: kg ? +l.qty.toFixed(2) : Math.max(1, Math.round(l.qty)) }).id
+      }
+      const it = d.items[id]
+      if (!it) continue
+      // lembra o nome da nota pra reconhecer sozinho da próxima vez
+      const key = normalize(l.productName)
+      if (!(it.aliases ?? []).includes(key)) Object.assign(it, { aliases: [...(it.aliases ?? []), key].slice(-8), updatedAt: now })
+      const cur = byItem.get(id) ?? { qty: 0, total: 0, kg: /^(KG|KGS)$/i.test(l.notaUnit) }
+      byItem.set(id, { qty: cur.qty + l.qty, total: cur.total + l.total, kg: cur.kg })
+    }
+    const listed = new Set(Object.values(d.list).filter((e) => !e.deleted).map((e) => e.itemId))
+    for (const [id, v] of byItem) {
+      const it = d.items[id]!
+      const existing = trip.lines.find((x) => x.itemId === id)
+      // unidades batem (kg com kg, unidade com unidade): usa a quantidade da nota;
+      // senão (cebola por unidade vendida por kg), mantém a quantidade e usa o total
+      const itemKg = it.unit === 'kg' || it.unit === 'g'
+      const qty = v.kg === itemKg ? (it.unit === 'g' ? v.qty * 1000 : v.qty) : existing?.qty ?? it.defaultQty
+      const unitPrice = +(v.total / Math.max(qty, 0.001)).toFixed(4)
+      if (existing) Object.assign(existing, { qty: +qty.toFixed(3), unitPrice, status: 'pego' })
+      else trip.lines.push({ id: uid(), itemId: id, qty: +qty.toFixed(3), unitPrice, status: 'pego', extra: !listed.has(id) })
+    }
+    trip.updatedAt = now
+  })
+  if (!('tripId' in dest)) {
+    finishTrip(tripId, dest.paidTicket)
+    commit((d) => {
+      const t = d.trips[tripId]
+      if (t) Object.assign(t, { finishedAt: dest.when, updatedAt: Date.now() })
+    })
+  }
+  return tripId
 }
 
 // ---------- Ajustes ----------

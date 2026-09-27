@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { NotaSheet } from '../components/NotaSheet'
 import { CATEGORIES } from '../data/catalog'
 import { brl, dateLabel, monthLabel, qtyLabel } from '../data/format'
 import { cycleStart, finishedTrips, itemStats, monthlyStats, tripTotal } from '../data/logic'
@@ -13,6 +14,13 @@ export function Resumo({ openItem }: { openItem: (id: Id) => void }) {
   const [sort, setSort] = useState<Sort>('gasto')
   const [openTrip, setOpenTrip] = useState<Id | null>(null)
   const [hover, setHover] = useState<string | null>(null)
+  const [nota, setNota] = useState(false)
+  const notaBtn = (
+    <button className="btn sm" onClick={() => setNota(true)}>
+      🧾 Ler nota
+    </button>
+  )
+  const notaSheet = nota && <NotaSheet onClose={() => setNota(false)} onDone={() => setNota(false)} />
 
   const trips = finishedTrips(db)
   const start = cycleStart(db.settings.ticketDay)
@@ -52,7 +60,9 @@ export function Resumo({ openItem }: { openItem: (id: Id) => void }) {
       <>
         <div className="page-head">
           <h1>Resumo</h1>
+          {notaBtn}
         </div>
+        {notaSheet}
         <div className="empty">
           <div className="big">📊</div>
           <p>Depois da primeira compra no Modo Mercado aparecem aqui:</p>
@@ -71,7 +81,9 @@ export function Resumo({ openItem }: { openItem: (id: Id) => void }) {
           <div className="muted small">Desde {dateLabel(start)}</div>
           <h1>Resumo</h1>
         </div>
+        {notaBtn}
       </div>
+      {notaSheet}
 
       <div className="grid2">
         <div className="card">

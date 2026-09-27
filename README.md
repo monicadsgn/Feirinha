@@ -35,8 +35,12 @@ Para ligar:
 
 Sem essas variáveis o app funciona igual, só sem a parte de compartilhar.
 
-## Próximos passos
+## Receitas e porções
 
-1. Porções do mês (quantas refeições a carne comprada rende) e ideias de receita por corte.
-2. Banco de receitas salvas do Instagram/TikTok.
-3. Ler o QR code da nota fiscal (NFC-e) para preencher os preços sozinho.
+Aba Receitas: receitas prontas pensadas pro que a casa compra (quanto de carne gastam e quanto rendem), a conta de quantas refeições a carne em casa + na lista rende até a próxima feira, e receitas salvas do Instagram/TikTok (no Android, "Compartilhar → Feirinha").
+
+## Nota fiscal (NFC-e)
+
+O QR code da nota aponta pra página pública da Sefaz. `api/nfce.js` (função da Vercel, região São Paulo) busca essa página e devolve os itens; o app liga cada produto a um item da despensa (entende abreviações como "DETERG", "CR LEITE") e lembra a escolha. Serve pra preencher os preços da compra em andamento ou salvar uma compra nova.
+
+O leitor segue o layout padrão do portal da NFC-e usado pela maioria dos estados. Se um estado usar outro formato, a função responde "não consegui ler os itens desse estado" com o endereço, pra ajustar o `parseNota`.

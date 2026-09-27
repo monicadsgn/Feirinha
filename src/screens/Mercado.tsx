@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Compare } from '../components/Compare'
+import { NotaSheet } from '../components/NotaSheet'
 import { PriceSheet } from '../components/PriceSheet'
 import { QuickAdd } from '../components/QuickAdd'
 import { SwipeRow } from '../components/SwipeRow'
@@ -24,6 +25,7 @@ function Start({ db }: { db: DB }) {
   const [shopId, setShopId] = useState(shops[0]?.id ?? '')
   const [kind, setKind] = useState<TripKind>('feira')
   const [compare, setCompare] = useState(false)
+  const [nota, setNota] = useState(false)
   const miss = kind === 'feira' ? forgotten(db) : []
   const left = ticketLeft(db)
 
@@ -39,6 +41,7 @@ function Start({ db }: { db: DB }) {
         </button>
       </div>
       {compare && <Compare onClose={() => setCompare(false)} />}
+      {nota && <NotaSheet onClose={() => setNota(false)} onDone={() => setNota(false)} />}
 
       <div className="card stack">
         <div className="field">
@@ -73,6 +76,9 @@ function Start({ db }: { db: DB }) {
         )}
         <button className="btn primary block" disabled={!shopId} onClick={() => startTrip(shopId, kind)}>
           Começar compra
+        </button>
+        <button className="btn ghost sm" onClick={() => setNota(true)}>
+          🧾 Já comprou? Ler a nota fiscal
         </button>
       </div>
 
@@ -119,6 +125,7 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
   const [aisles, setAisles] = useState(false)
   const [showOthers, setShowOthers] = useState(false)
   const [compare, setCompare] = useState<string | null>(null)
+  const [nota, setNota] = useState(false)
 
   const lines = new Map(trip.lines.map((l) => [l.itemId, l]))
   const inList = listItemIds(db)
@@ -252,6 +259,9 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
           ↕ Corredores
         </button>
       </div>
+      <button className="btn block" style={{ marginTop: 10 }} onClick={() => setNota(true)}>
+        🧾 Ler a nota fiscal (preenche os preços)
+      </button>
       <button className="btn primary block" style={{ marginTop: 10 }} onClick={() => setFinishing(true)}>
         Finalizar compra
       </button>
@@ -301,6 +311,7 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
         />
       )}
 
+      {nota && <NotaSheet tripId={trip.id} onClose={() => setNota(false)} onDone={() => setNota(false)} />}
       {compare != null && <Compare title={compare || undefined} onClose={() => setCompare(null)} />}
 
       {aisles && shop && <AisleSheet db={db} shopId={shop.id} onClose={() => setAisles(false)} />}

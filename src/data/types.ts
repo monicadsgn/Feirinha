@@ -49,6 +49,8 @@ export interface Item extends Base {
   note?: string
   /** Carnes: quantas refeições do casal 1 unidade (kg) rende. Aprendido com o uso. */
   mealsPerUnit?: number
+  /** Nomes como vêm na nota fiscal ("DETERG LIQ YPE 500ML"), pra reconhecer da próxima vez. */
+  aliases?: string[]
   shopId: Id
   /** Itens que costumam andar juntos (macarrão → molho). */
   pairs: Id[]

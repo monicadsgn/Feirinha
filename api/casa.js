@@ -2161,6 +2161,21 @@ async function handler(req, res) {
 			});
 			return res.status(200).send(reply);
 		}
+		const texto = q("texto");
+		if (texto && !q("receita")) {
+			const reply = await withCasa(casa, me, () => {
+				const uses = matchIngredients(texto);
+				const name = texto.split("\n").map((l) => l.trim()).find((l) => l.length > 3)?.slice(0, 60) || "Receita do print";
+				saveRecipe({
+					name,
+					text: texto,
+					uses,
+					meals: []
+				});
+				return `Receita salva no Feirinha: ${name}. ${uses.length ? `Usa ${uses.length} ${uses.length === 1 ? "item" : "itens"} da despensa.` : "Não achei ingredientes da despensa nesse texto."}`;
+			});
+			return res.status(200).send(reply);
+		}
 		const link = q("receita");
 		if (link) {
 			const url = link.match(/https?:\/\/\S+/)?.[0] ?? link;

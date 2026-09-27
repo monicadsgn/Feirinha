@@ -1,6 +1,7 @@
 // Atalhos que falam direto com a casa, sem abrir o app (Siri no iPhone):
 //   /api/casa?c=CÓDIGO&quem=Moni&voz=acabou o arroz e o feijão
 //   /api/casa?c=CÓDIGO&quem=Moni&receita=https://www.instagram.com/reel/...
+//   /api/casa?c=CÓDIGO&quem=Moni&texto=<texto lido de um print>
 // Carrega a casa do banco, roda o mesmo código do app e grava o que mudou.
 // Responde texto curto, pra Siri ler em voz alta.
 
@@ -105,6 +106,17 @@ export default async function handler(req: { query: Record<string, string | stri
       const reply = await withCasa(casa, me, () => {
         const r = runCommand(parseCommand(voz))
         return r ? `${r.summary}.` : 'Não entendi nenhum item. Tente de novo falando o nome do produto.'
+      })
+      return res.status(200).send(reply)
+    }
+    // texto de um print (o atalho do iPhone usa "Extrair Texto da Imagem")
+    const texto = q('texto')
+    if (texto && !q('receita')) {
+      const reply = await withCasa(casa, me, () => {
+        const uses = matchIngredients(texto)
+        const name = texto.split('\n').map((l) => l.trim()).find((l) => l.length > 3)?.slice(0, 60) || 'Receita do print'
+        saveRecipe({ name, text: texto, uses, meals: [] })
+        return `Receita salva no Feirinha: ${name}. ${uses.length ? `Usa ${uses.length} ${uses.length === 1 ? 'item' : 'itens'} da despensa.` : 'Não achei ingredientes da despensa nesse texto.'}`
       })
       return res.status(200).send(reply)
     }

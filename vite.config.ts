@@ -40,6 +40,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // o leitor de prints é grande e só baixa quando alguém usa
+        globIgnores: ['tesseract/**'],
       },
     }),
   ],

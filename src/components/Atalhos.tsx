@@ -112,14 +112,37 @@ export function Atalhos() {
                 <Copy text={`${casaLink}&receita=`} />
                 <span className="muted">No post do Instagram/TikTok: Compartilhar → Salvar no Feirinha. A receita aparece em Receitas → Salvas, com os ingredientes da despensa.</span>
               </div>
+              <div className="stack" style={{ gap: 6 }}>
+                <b>3. “Receita do print” (carrossel ou vídeo)</b>
+                <span>
+                  Quando os ingredientes estão na imagem e não na legenda: tire print do slide (ou pause o vídeo e tire print). Novo atalho
+                  “Receita do print”, com <b>Mostrar na Folha de Compartilhamento</b> aceitando <b>Imagens</b>. Ações:
+                </span>
+                <ol style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }}>
+                  <li>
+                    <b>Extrair Texto da Imagem</b> → Entrada do Atalho
+                  </li>
+                  <li>
+                    <b>Codificar URL</b> → Texto da Imagem
+                  </li>
+                  <li>
+                    <b>Obter Conteúdo do URL</b> → cole o link abaixo + “Texto do URL Codificado” no fim
+                  </li>
+                  <li>
+                    <b>Mostrar Notificação</b> → Conteúdo do URL
+                  </li>
+                </ol>
+                <Copy text={`${casaLink}&texto=`} />
+                <span className="muted">No print (ou na foto): Compartilhar → Receita do print.</span>
+              </div>
             </>
           )}
           <div>
-            <b>3. Ditado:</b> se o 🎤 não aparecer dentro do app, use o microfone do próprio teclado no “Adicionar” e toque em Enter: a frase vira
+            <b>4. Ditado:</b> se o 🎤 não aparecer dentro do app, use o microfone do próprio teclado no “Adicionar” e toque em Enter: a frase vira
             comando do mesmo jeito.
           </div>
           <div>
-            <b>4. Lembrete ao chegar em casa:</b> Atalhos → Automação → Chegar (casa) → <b>Mostrar Notificação</b> “Conferir a nota no Feirinha”.
+            <b>5. Lembrete ao chegar em casa:</b> Atalhos → Automação → Chegar (casa) → <b>Mostrar Notificação</b> “Conferir a nota no Feirinha”.
           </div>
         </div>
       ) : (
@@ -132,7 +155,8 @@ export function Atalhos() {
             arrastar cada um pra tela inicial.
           </div>
           <div>
-            <b>2. Salvar receita:</b> no Instagram/TikTok, Compartilhar → <b>Feirinha</b>. O app busca a legenda e acha os ingredientes.
+            <b>2. Salvar receita:</b> no Instagram/TikTok, Compartilhar → <b>Feirinha</b>. O app busca a legenda e acha os ingredientes. Se os
+            ingredientes estiverem na imagem (carrossel ou vídeo), tire print e use <b>📷 Ler foto ou print</b> na tela de salvar receita.
           </div>
           <div className="stack" style={{ gap: 6 }}>
             <b>3. Voz com o Google Assistente</b>

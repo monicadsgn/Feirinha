@@ -3,6 +3,7 @@ import { Sheet, Stepper, confirmAction, toast } from '../components/ui'
 import { SEED_ITEMS } from '../data/catalog'
 import { brl, qtyLabel } from '../data/format'
 import { mealsPerUnit, proteinPlan, recipeStatus } from '../data/logic'
+import { readImages } from '../data/ocr'
 import { MEAL_LABEL, RECIPES, type BuiltinRecipe } from '../data/recipes'
 import { addToList, deleteRecipe, ensureSeedItem, matchIngredients, saveRecipe, updateItem, updateSettings, useDB } from '../data/store'
 import type { DB, Id, Meal, SavedRecipe } from '../data/types'
@@ -347,6 +348,25 @@ function SaveSheet({ initial, onClose, onSaved }: { initial: Partial<SavedRecipe
   const uses = [...new Set([...detected.filter((d) => !off.has(d)), ...extra])]
   const [fetching, setFetching] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [ocr, setOcr] = useState<string | null>(null)
+
+  /** Prints do carrossel ou do vídeo: lê o texto e junta na receita. */
+  const readPhotos = async (files: FileList | null) => {
+    if (!files?.length) return
+    setFetchError(null)
+    try {
+      const got = await readImages([...files], setOcr)
+      if (!got.trim()) setFetchError('Não achei texto nessas imagens. Tente um print mais de perto.')
+      else {
+        setText((t) => (t.trim() ? `${t.trim()}\n\n${got}` : got))
+        setName((n) => n || got.split('\n')[0]!.slice(0, 60))
+      }
+    } catch {
+      setFetchError('Não consegui ler as imagens agora. Tente de novo com internet (a primeira vez baixa o leitor).')
+    } finally {
+      setOcr(null)
+    }
+  }
 
   /** Busca título e legenda do post (Instagram, TikTok, YouTube, site de receita). */
   const fetchCaption = async (link: string) => {
@@ -401,6 +421,11 @@ function SaveSheet({ initial, onClose, onSaved }: { initial: Partial<SavedRecipe
             </button>
           ))}
         </div>
+        <label className="btn sm block" style={{ cursor: 'pointer' }}>
+          📷 Ler foto ou print (carrossel, quadro do vídeo)
+          <input type="file" accept="image/*" multiple hidden onChange={(e) => void readPhotos(e.target.files)} />
+        </label>
+        {ocr && <span className="small muted">{ocr}</span>}
         <label className="field">
           <span>Cole a legenda ou os ingredientes</span>
           <textarea id="rec-text" rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder={'500 g de carne moída\n2 batatas\n1 caixa de creme de leite…'} />

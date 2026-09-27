@@ -4,17 +4,19 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "npm run build:api && tsc -b && vite build",
+    "dev": "node scripts/copy-ocr.mjs && vite",
+    "build": "node scripts/copy-ocr.mjs && npm run build:api && tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "build:api": "rolldown server/casa.ts --format esm --platform node --file api/casa.js --banner '// Gerado por `npm run build:api` a partir de server/casa.ts. Não edite à mão.'"
   },
   "dependencies": {
     "@fontsource-variable/montserrat": "^5.3.0",
+    "@tesseract.js-data/por": "^1.0.0",
     "jsqr": "^1.4.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",

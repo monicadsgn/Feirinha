@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { BUILD } from '../pwa'
 import { useDB } from '../data/store'
 import { useSync } from '../data/sync'
+import { SkillCard } from './SkillCard'
 import { toast } from './ui'
 
 /**
@@ -174,6 +175,7 @@ export function Atalhos() {
           </div>
         </div>
       )}
+      <SkillCard casaLink={casaLink} me={db.settings.me} />
       <div className="small muted">Versão do app: {BUILD}</div>
     </div>
   )

@@ -2141,9 +2141,25 @@ async function withCasa(casa, me, action) {
 	});
 	return reply;
 }
+/** Quem abre o link no navegador (skill do Claude, toque num link) vê uma página, não texto cru. */
+function page(ok, msg) {
+	const esc = msg.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+	return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Feirinha</title>
+<style>body{margin:0;min-height:100dvh;display:grid;place-items:center;background:#faf5ec;color:#1f2a24;font:16px system-ui,-apple-system,sans-serif;padding:24px;box-sizing:border-box}
+.c{max-width:420px;text-align:center}.i{font-size:56px}.m{font-size:18px;font-weight:700;margin:12px 0 20px;line-height:1.4}
+a{display:inline-block;background:#2f6b4f;color:#fff;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:14px}
+@media (prefers-color-scheme:dark){body{background:#151a17;color:#eef0ea}a{background:#6fbf93;color:#0f1a14}}</style></head>
+<body><div class="c"><div class="i">${ok ? "🧺" : "⚠️"}</div><div class="m">${esc}</div><a href="/">Abrir o Feirinha</a></div></body></html>`;
+}
 async function handler(req, res) {
-	res.setHeader("Content-Type", "text/plain; charset=utf-8");
+	const html = String(req.headers?.accept ?? "").includes("text/html");
+	res.setHeader("Content-Type", html ? "text/html; charset=utf-8" : "text/plain; charset=utf-8");
 	res.setHeader("Cache-Control", "no-store");
+	const send = res;
+	res = {
+		...send,
+		status: (n) => ({ send: (s) => send.status(n).send(html ? page(n < 400, s) : s) })
+	};
 	const q = (k) => {
 		const v = req.query[k];
 		return (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
@@ -2165,12 +2181,14 @@ async function handler(req, res) {
 		if (texto && !q("receita")) {
 			const reply = await withCasa(casa, me, () => {
 				const uses = matchIngredients(texto);
-				const name = texto.split("\n").map((l) => l.trim()).find((l) => l.length > 3)?.slice(0, 60) || "Receita do print";
+				const name = q("nome") || texto.split("\n").map((l) => l.trim()).find((l) => l.length > 3)?.slice(0, 60) || "Receita do print";
+				const meals = q("refeicao").split(",").map((m) => m.trim()).filter((m) => m === "cafe" || m === "almoco" || m === "jantar");
 				saveRecipe({
 					name,
 					text: texto,
 					uses,
-					meals: []
+					meals,
+					url: q("link") || void 0
 				});
 				return `Receita salva no Feirinha: ${name}. ${uses.length ? `Usa ${uses.length} ${uses.length === 1 ? "item" : "itens"} da despensa.` : "Não achei ingredientes da despensa nesse texto."}`;
 			});

@@ -317,3 +317,24 @@ export const CATALOG_V3_RENAMES: Record<string, string> = {
 export const CATALOG_V3_NEW = ['ervilha-lata', 'sazon', 'paprica', 'oregano', 'chimichurri', 'lemon-pepper']
 /** Itens que saíram na v3 (tempero genérico virou itens separados). */
 export const CATALOG_V3_REMOVED: Record<string, string> = { temperos: 'Temperos da cozinha' }
+
+/** Peso médio de 1 unidade (g), pra estimar o que é vendido por kg e contado por unidade. */
+export const DEFAULT_GRAMS: Record<string, number> = {
+  tomate: 150,
+  cebola: 150,
+  batata: 200,
+  cenoura: 150,
+  alho: 50,
+  limao: 80,
+  pimentao: 180,
+  maca: 180,
+  laranja: 200,
+  alface: 300,
+  banana: 1500,
+  coentro: 100,
+  cebolinha: 100,
+}
+
+export function gramsOf(item: { id: string; gramsPerUnit?: number; unit: string }): number {
+  return item.gramsPerUnit ?? DEFAULT_GRAMS[item.id] ?? (item.unit === 'cacho' ? 1500 : item.unit === 'pé' || item.unit === 'maço' ? 250 : 200)
+}

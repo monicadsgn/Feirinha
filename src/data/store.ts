@@ -603,9 +603,14 @@ export function applyNotaToTrip(tripId: Id, lines: NotaLine[], removeIds: Id[]) 
       const existing = trip.lines.find((x) => x.itemId === id)
       const before = existing?.status === 'pego' ? existing.qty : 0
       const { qty, unitPrice } = notaQtyPrice(it, v, existing?.qty ?? it.defaultQty)
-      if (existing) Object.assign(existing, { qty, unitPrice, status: 'pego' })
+      if (existing) Object.assign(existing, { qty, unitPrice, status: 'pego', estimated: undefined })
       else trip.lines.push({ id: uid(), itemId: id, qty, unitPrice, status: 'pego', extra: !listed.has(id) })
       bumpStock(id, qty - before)
+      // contado por unidade e vendido por kg: a nota diz o peso real → aprende o peso médio
+      if (v.kg && it.unit !== 'kg' && it.unit !== 'g' && qty > 0) {
+        const g = Math.round((v.qty * 1000) / qty)
+        if (g > 5 && g < 5000) Object.assign(it, { gramsPerUnit: it.gramsPerUnit ? Math.round((it.gramsPerUnit + g) / 2) : g, updatedAt: now })
+      }
       // comprou: sai da lista (se ainda estiver lá)
       if (finished) for (const e of Object.values(d.list)) if (e.itemId === id && !e.deleted) Object.assign(e, { deleted: true, updatedAt: now })
     }

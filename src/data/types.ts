@@ -51,6 +51,8 @@ export interface Item extends Base {
   mealsPerUnit?: number
   /** Nomes como vêm na nota fiscal ("DETERG LIQ YPE 500ML"), pra reconhecer da próxima vez. */
   aliases?: string[]
+  /** Peso médio de 1 unidade, em gramas (cebola ~150 g). Aprendido com a nota. */
+  gramsPerUnit?: number
   shopId: Id
   /** Itens que costumam andar juntos (macarrão → molho). */
   pairs: Id[]
@@ -77,6 +79,8 @@ export interface TripLine {
   unitPrice: number | null
   status: 'pego' | 'faltou'
   extra: boolean
+  /** Preço estimado (preço do kg × peso médio); a nota fiscal corrige. */
+  estimated?: boolean
 }
 
 export interface Trip extends Base {

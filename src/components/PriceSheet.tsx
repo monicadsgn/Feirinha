@@ -1,14 +1,19 @@
 import { useState } from 'react'
+import { gramsOf } from '../data/catalog'
 import { brl, qtyLabel } from '../data/format'
+import { updateItem } from '../data/store'
 import type { Item, TripLine } from '../data/types'
 import { Sheet, Stepper } from './ui'
 
-type Mode = 'unit' | 'total'
+type Mode = 'unit' | 'total' | 'kg'
 
 /**
  * Teclado de preço estilo app de banco: digita 6-4-9 e vira R$ 6,49.
- * Dois jeitos de anotar: preço de cada unidade, ou o total pago (bom pra
- * alho, cebola e tudo que é pesado no caixa sem saber o peso antes).
+ * Três jeitos de anotar:
+ * - preço de cada unidade;
+ * - total pago;
+ * - preço do kg da placa × peso médio (cebola contada por unidade e pesada
+ *   no caixa): fica como estimativa e a nota fiscal corrige.
  */
 export function PriceSheet({
   item,
@@ -25,21 +30,23 @@ export function PriceSheet({
   line?: TripLine
   defaultQty: number
   lastPrice: number | null
-  onSave: (qty: number, price: number | null) => void
+  onSave: (qty: number, price: number | null, estimated?: boolean) => void
   onMissing: () => void
   onRemove?: () => void
   onCompare?: () => void
   onClose: () => void
 }) {
   const [qty, setQty] = useState(line?.qty ?? defaultQty)
-  const [mode, setMode] = useState<Mode>(item.category === 'hortifruti' || /quilo|peso/i.test(item.note ?? '') ? 'total' : 'unit')
+  const byWeight = item.unit !== 'kg' && item.unit !== 'g' && (item.category === 'hortifruti' || /quilo|peso/i.test(item.note ?? ''))
+  const [mode, setMode] = useState<Mode>(byWeight ? 'kg' : 'unit')
+  const [grams, setGrams] = useState(gramsOf(item))
   const [cents, setCents] = useState(() => {
     if (line?.unitPrice == null) return ''
-    const v = mode === 'total' ? line.unitPrice * line.qty : line.unitPrice
+    const v = mode === 'total' ? line.unitPrice * line.qty : mode === 'kg' ? (line.unitPrice * 1000) / gramsOf(item) : line.unitPrice
     return String(Math.round(v * 100))
   })
   const typed = cents ? parseInt(cents, 10) / 100 : null
-  const unitPrice = typed == null ? null : mode === 'total' ? typed / Math.max(qty, 0.001) : typed
+  const unitPrice = typed == null ? null : mode === 'total' ? typed / Math.max(qty, 0.001) : mode === 'kg' ? (typed * grams) / 1000 : typed
   const total = unitPrice == null ? null : unitPrice * qty
 
   const press = (k: string) => {
@@ -51,8 +58,16 @@ export function PriceSheet({
   const switchMode = (m: Mode) => {
     if (m === mode) return
     // mantém o valor coerente ao trocar de modo
-    if (typed != null) setCents(String(Math.round((m === 'total' ? typed * qty : typed / Math.max(qty, 0.001)) * 100)))
+    if (unitPrice != null) {
+      const v = m === 'total' ? unitPrice * qty : m === 'kg' ? (unitPrice * 1000) / grams : unitPrice
+      setCents(String(Math.round(v * 100)))
+    }
     setMode(m)
+  }
+
+  const save = () => {
+    if (mode === 'kg' && grams !== gramsOf(item)) updateItem(item.id, { gramsPerUnit: grams })
+    onSave(qty, unitPrice == null ? null : +unitPrice.toFixed(4), mode === 'kg' && unitPrice != null)
   }
 
   const diff = unitPrice != null && lastPrice ? unitPrice / lastPrice - 1 : null
@@ -69,6 +84,11 @@ export function PriceSheet({
           <button className={'chip grow' + (mode === 'unit' ? ' on' : '')} style={{ justifyContent: 'center' }} onClick={() => switchMode('unit')}>
             Preço por {item.unit}
           </button>
+          {byWeight && (
+            <button className={'chip grow' + (mode === 'kg' ? ' on' : '')} style={{ justifyContent: 'center' }} onClick={() => switchMode('kg')}>
+              Preço do kg
+            </button>
+          )}
           <button className={'chip grow' + (mode === 'total' ? ' on' : '')} style={{ justifyContent: 'center' }} onClick={() => switchMode('total')}>
             Total pago
           </button>
@@ -77,7 +97,17 @@ export function PriceSheet({
         <div>
           <div className={'price-display num' + (typed == null ? ' empty' : '')}>{brl(typed ?? 0)}</div>
           <div className="center small muted" style={{ minHeight: 20 }}>
-            {mode === 'unit' ? (
+            {mode === 'kg' ? (
+              <>
+                preço do kg na placa
+                {total != null && (
+                  <>
+                    {' '}
+                    · {qtyLabel(qty, item.unit)} ≈ <b className="num">{brl(total)}</b>
+                  </>
+                )}
+              </>
+            ) : mode === 'unit' ? (
               <>
                 preço por {item.unit}
                 {total != null && qty !== 1 && (
@@ -106,6 +136,21 @@ export function PriceSheet({
           </div>
         </div>
 
+        {mode === 'kg' && (
+          <div className="row between small" style={{ fontWeight: 700 }}>
+            <span>Cada {item.unit} pesa uns</span>
+            <div className="stepper">
+              <button type="button" aria-label="Menos peso" onClick={() => setGrams((g) => Math.max(10, g - (g > 300 ? 50 : 10)))}>
+                −
+              </button>
+              <span className="num">{grams >= 1000 ? `${(grams / 1000).toString().replace('.', ',')} kg` : `${grams} g`}</span>
+              <button type="button" aria-label="Mais peso" onClick={() => setGrams((g) => g + (g >= 300 ? 50 : 10))}>
+                +
+              </button>
+            </div>
+          </div>
+        )}
+
         {lastPrice != null && typed == null && (
           <button className="btn block" onClick={() => onSave(qty, lastPrice)}>
             Mesmo preço da última vez · <b className="num">{brl(lastPrice)}</b>/{item.unit}
@@ -120,11 +165,18 @@ export function PriceSheet({
           ))}
         </div>
 
+        {item.category === 'hortifruti' && typed == null && (
+          <button className="btn block" onClick={() => onSave(qty, null)}>
+            ⚖️ Pesa no caixa: pegar sem preço
+            {lastPrice != null && <span className="small muted"> · ~{brl(lastPrice * qty)}</span>}
+          </button>
+        )}
+
         <div className="row">
           <button className="btn" onClick={onMissing}>
             Não tinha
           </button>
-          <button className="btn primary grow" onClick={() => onSave(qty, unitPrice == null ? null : +unitPrice.toFixed(4))}>
+          <button className="btn primary grow" onClick={save}>
             {typed == null ? 'Pegar sem preço' : 'Pegar ✓'}
           </button>
         </div>

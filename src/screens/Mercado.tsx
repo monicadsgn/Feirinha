@@ -134,8 +134,18 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
   const extras = trip.lines.filter((l) => !inList.has(l.itemId)).map((l) => db.items[l.itemId]).filter((i): i is Item => !!i)
 
   const t = tripTotal(trip)
+  // o que é pesado no caixa (verdura) entra no total pela estimativa da última compra
+  let guess = 0
+  let unknownPrice = 0
+  for (const l of trip.lines) {
+    if (l.status !== 'pego' || l.unitPrice != null) continue
+    const lp = lastPrice(db, l.itemId, trip.shopId)
+    if (lp != null) guess += lp * l.qty
+    else unknownPrice++
+  }
+  const expected = t.total + guess
   const ticket = db.settings.ticketMonthly > 0 ? ticketLeft(db) : null
-  const over = ticket != null ? Math.max(0, t.total - ticket) : 0
+  const over = ticket != null ? Math.max(0, expected - ticket) : 0
   const done = here.filter((i) => lines.has(i.id)).length
 
   const order = shop?.aisles ?? []
@@ -154,7 +164,7 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
         key={it.id}
         className={l?.status === 'pego' ? 'done' : l?.status === 'faltou' ? 'missing' : ''}
         onTap={() => setEditing(it.id)}
-        onRight={() => setLine(trip.id, it.id, { status: 'pego', qty: l?.qty ?? qtyFor(it), unitPrice: l?.unitPrice ?? lp })}
+        onRight={() => setLine(trip.id, it.id, { status: 'pego', qty: l?.qty ?? qtyFor(it), unitPrice: l?.unitPrice ?? lp, estimated: l?.unitPrice == null && lp != null ? true : l?.estimated })}
         onLeft={() => setLine(trip.id, it.id, { status: 'faltou' })}
       >
         <span className={'check' + (l?.status === 'pego' ? ' on' : l?.status === 'faltou' ? ' no' : '')}>{l?.status === 'pego' ? '✓' : l?.status === 'faltou' ? '✕' : ''}</span>
@@ -167,7 +177,12 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
             {l?.status === 'pego' && l.unitPrice == null ? ' · sem preço' : ''}
           </div>
         </div>
-        {l?.status === 'pego' && l.unitPrice != null && <b className="num">{brl(l.unitPrice * l.qty)}</b>}
+        {l?.status === 'pego' && l.unitPrice != null && (
+          <b className="num" title={l.estimated ? 'estimado: a nota corrige' : undefined}>
+            {l.estimated ? '~' : ''}
+            {brl(l.unitPrice * l.qty)}
+          </b>
+        )}
       </SwipeRow>
     )
   }
@@ -186,21 +201,26 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
             {done}/{here.length} itens
           </div>
         </div>
-        <div className="market-total num">{brl(t.total)}</div>
+        <div className="market-total num">{brl(expected)}</div>
+        {guess > 0 && (
+          <div className="small" style={{ opacity: 0.9 }}>
+            {brl(t.total)} anotado + ~{brl(guess)} do que pesa no caixa (pela última compra)
+          </div>
+        )}
         {ticket != null && (
           <>
             <div className={'bar' + (over > 0 ? ' over' : '')}>
-              <i style={{ width: `${Math.min(100, ticket > 0 ? (t.total / ticket) * 100 : 100)}%` }} />
+              <i style={{ width: `${Math.min(100, ticket > 0 ? (expected / ticket) * 100 : 100)}%` }} />
             </div>
             <div className="row between small" style={{ fontWeight: 700 }}>
-              <span>{over > 0 ? `Passou ${brl(over)} → dinheiro` : `Cabe mais ${brl(ticket - t.total)} no ticket`}</span>
+              <span>{over > 0 ? `Passa ~${brl(over)} → dinheiro` : `Cabe mais ~${brl(ticket - expected)} no ticket`}</span>
               <span className="num">ticket {brl(ticket)}</span>
             </div>
           </>
         )}
-        {t.unpriced > 0 && (
+        {unknownPrice > 0 && (
           <div className="small" style={{ marginTop: 4, opacity: 0.85 }}>
-            {t.unpriced} {t.unpriced === 1 ? 'item pego' : 'itens pegos'} sem preço
+            {unknownPrice} {unknownPrice === 1 ? 'item pego' : 'itens pegos'} sem preço e sem compra anterior: a nota preenche em casa
           </div>
         )}
       </div>
@@ -279,8 +299,8 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
           defaultQty={qtyFor(editItem)}
           lastPrice={lastPrice(db, editItem.id, trip.shopId)}
           onClose={() => setEditing(null)}
-          onSave={(qty, price) => {
-            setLine(trip.id, editItem.id, { status: 'pego', qty, unitPrice: price })
+          onSave={(qty, price, estimated) => {
+            setLine(trip.id, editItem.id, { status: 'pego', qty, unitPrice: price, estimated: estimated || undefined })
             setEditing(null)
           }}
           onMissing={() => {

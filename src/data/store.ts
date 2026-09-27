@@ -462,59 +462,164 @@ export interface NotaLine {
   total: number
 }
 
+const isKg = (u: string) => /^(KG|KGS)$/i.test(u)
+
+/** Cria os itens novos, guarda o nome da nota no item e soma produtos repetidos. */
+function resolveNota(d: DB, lines: NotaLine[]): Map<Id, { qty: number; total: number; kg: boolean }> {
+  const now = Date.now()
+  const byItem = new Map<Id, { qty: number; total: number; kg: boolean }>()
+  for (const l of lines) {
+    if (l.target === 'ignorar') continue
+    let id = l.target
+    if (id === 'novo') {
+      const kg = isKg(l.notaUnit)
+      id = createItem(d, prettyName(l.productName), { unit: kg ? 'kg' : 'un', defaultQty: kg ? +l.qty.toFixed(2) : Math.max(1, Math.round(l.qty)) }).id
+    }
+    const it = d.items[id]
+    if (!it) continue
+    // lembra o nome da nota pra reconhecer sozinho da próxima vez
+    const key = normalize(l.productName)
+    if (!(it.aliases ?? []).includes(key)) Object.assign(it, { aliases: [...(it.aliases ?? []), key].slice(-8), updatedAt: now })
+    const cur = byItem.get(id) ?? { qty: 0, total: 0, kg: isKg(l.notaUnit) }
+    byItem.set(id, { qty: cur.qty + l.qty, total: cur.total + l.total, kg: cur.kg })
+  }
+  return byItem
+}
+
+/** Quantidade e preço por unidade do item a partir da nota. */
+function notaQtyPrice(it: Item, v: { qty: number; total: number; kg: boolean }, fallbackQty: number) {
+  // unidades batem (kg com kg, unidade com unidade): usa a quantidade da nota;
+  // senão (cebola contada por unidade e vendida por kg), mantém a quantidade e usa o total
+  const itemKg = it.unit === 'kg' || it.unit === 'g'
+  const qty = v.kg === itemKg ? (it.unit === 'g' ? v.qty * 1000 : v.qty) : fallbackQty
+  return { qty: +qty.toFixed(3), unitPrice: +(v.total / Math.max(qty, 0.001)).toFixed(4) }
+}
+
+export interface NotaDiff {
+  /** Preço anotado no mercado diferente do da nota (diferença > R$ 0,05 no total). */
+  priceChanges: { itemId: Id; name: string; app: number; nota: number }[]
+  /** Estava sem preço no app e a nota preenche. */
+  filled: { itemId: Id; name: string; nota: number }[]
+  /** Está na nota e não foi marcado no app (esqueceu de marcar ou não estava na lista). */
+  added: { key: string; name: string; total: number }[]
+  /** Marcado como pego no app, mas não aparece na nota. */
+  notInNota: { itemId: Id; name: string }[]
+  appTotal: number
+  notaTotal: number
+}
+
+/** Compara a nota com uma compra (em andamento ou já finalizada), sem mudar nada. */
+export function compareNota(tripId: Id, lines: NotaLine[]): NotaDiff {
+  const trip = db.trips[tripId]!
+  const diff: NotaDiff = { priceChanges: [], filled: [], added: [], notInNota: [], appTotal: 0, notaTotal: 0 }
+  const seen = new Set<Id>()
+  const sums = new Map<string, { name: string; total: number; target: NotaLine['target']; qty: number; kg: boolean }>()
+  for (const l of lines) {
+    if (l.target === 'ignorar') continue
+    const key = l.target === 'novo' ? `novo:${l.productName}` : l.target
+    const cur = sums.get(key) ?? { name: l.target === 'novo' ? prettyName(l.productName) : db.items[l.target]?.name ?? l.productName, total: 0, target: l.target, qty: 0, kg: isKg(l.notaUnit) }
+    sums.set(key, { ...cur, total: cur.total + l.total, qty: cur.qty + l.qty })
+    diff.notaTotal += l.total
+  }
+  for (const [key, v] of sums) {
+    const line = v.target !== 'novo' ? trip.lines.find((x) => x.itemId === v.target && x.status === 'pego') : undefined
+    if (!line) {
+      diff.added.push({ key, name: v.name, total: v.total })
+      continue
+    }
+    seen.add(line.itemId)
+    if (line.unitPrice == null) diff.filled.push({ itemId: line.itemId, name: v.name, nota: v.total })
+    else {
+      const app = line.unitPrice * line.qty
+      if (Math.abs(app - v.total) > 0.05) diff.priceChanges.push({ itemId: line.itemId, name: v.name, app, nota: v.total })
+    }
+  }
+  for (const l of trip.lines) {
+    if (l.status !== 'pego') continue
+    diff.appTotal += (l.unitPrice ?? 0) * l.qty
+    if (!seen.has(l.itemId)) diff.notInNota.push({ itemId: l.itemId, name: db.items[l.itemId]?.name ?? '?' })
+  }
+  return diff
+}
+
 /**
- * Coloca os itens da nota numa compra: na compra em andamento (preenche os
- * preços) ou numa compra nova já finalizada.
+ * Aplica a nota numa compra existente: preços da nota valem, o que faltou
+ * marcar entra, e o que foi marcado mas não está na nota sai (se escolhido).
+ * Se a compra já foi finalizada, corrige o estoque e devolve pra lista o que
+ * não foi comprado.
  */
-export function importNota(lines: NotaLine[], dest: { tripId: Id } | { shopId: Id; when: number; paidTicket: number }): Id {
-  const tripId = 'tripId' in dest ? dest.tripId : uid()
+export function applyNotaToTrip(tripId: Id, lines: NotaLine[], removeIds: Id[]) {
   commit((d) => {
+    const trip = d.trips[tripId]
+    if (!trip) return
     const now = Date.now()
-    let trip = d.trips[tripId]
-    if (!trip) {
-      const nd = dest as { shopId: Id; when: number }
-      trip = { id: tripId, shopId: nd.shopId, kind: 'feira', startedAt: nd.when, finishedAt: null, lines: [], paidTicket: 0, updatedAt: now }
-      d.trips[tripId] = trip
-    }
-    // soma produtos repetidos que caem no mesmo item
-    const byItem = new Map<Id, { qty: number; total: number; kg: boolean }>()
-    for (const l of lines) {
-      if (l.target === 'ignorar') continue
-      let id = l.target
-      if (id === 'novo') {
-        const kg = /^(KG|KGS)$/i.test(l.notaUnit)
-        id = createItem(d, prettyName(l.productName), { unit: kg ? 'kg' : 'un', defaultQty: kg ? +l.qty.toFixed(2) : Math.max(1, Math.round(l.qty)) }).id
-      }
-      const it = d.items[id]
-      if (!it) continue
-      // lembra o nome da nota pra reconhecer sozinho da próxima vez
-      const key = normalize(l.productName)
-      if (!(it.aliases ?? []).includes(key)) Object.assign(it, { aliases: [...(it.aliases ?? []), key].slice(-8), updatedAt: now })
-      const cur = byItem.get(id) ?? { qty: 0, total: 0, kg: /^(KG|KGS)$/i.test(l.notaUnit) }
-      byItem.set(id, { qty: cur.qty + l.qty, total: cur.total + l.total, kg: cur.kg })
-    }
+    const finished = trip.finishedAt != null
+    const byItem = resolveNota(d, lines)
     const listed = new Set(Object.values(d.list).filter((e) => !e.deleted).map((e) => e.itemId))
+    const bumpStock = (id: Id, delta: number) => {
+      const it = d.items[id]
+      if (!finished || !it || !delta) return
+      const est = estimateStock(d, it) ?? 0
+      Object.assign(it, { stockQty: Math.max(0, +(est + delta).toFixed(2)), stockAt: now, updatedAt: now })
+    }
     for (const [id, v] of byItem) {
       const it = d.items[id]!
       const existing = trip.lines.find((x) => x.itemId === id)
-      // unidades batem (kg com kg, unidade com unidade): usa a quantidade da nota;
-      // senão (cebola por unidade vendida por kg), mantém a quantidade e usa o total
-      const itemKg = it.unit === 'kg' || it.unit === 'g'
-      const qty = v.kg === itemKg ? (it.unit === 'g' ? v.qty * 1000 : v.qty) : existing?.qty ?? it.defaultQty
-      const unitPrice = +(v.total / Math.max(qty, 0.001)).toFixed(4)
-      if (existing) Object.assign(existing, { qty: +qty.toFixed(3), unitPrice, status: 'pego' })
-      else trip.lines.push({ id: uid(), itemId: id, qty: +qty.toFixed(3), unitPrice, status: 'pego', extra: !listed.has(id) })
+      const before = existing?.status === 'pego' ? existing.qty : 0
+      const { qty, unitPrice } = notaQtyPrice(it, v, existing?.qty ?? it.defaultQty)
+      if (existing) Object.assign(existing, { qty, unitPrice, status: 'pego' })
+      else trip.lines.push({ id: uid(), itemId: id, qty, unitPrice, status: 'pego', extra: !listed.has(id) })
+      bumpStock(id, qty - before)
+      // comprou: sai da lista (se ainda estiver lá)
+      if (finished) for (const e of Object.values(d.list)) if (e.itemId === id && !e.deleted) Object.assign(e, { deleted: true, updatedAt: now })
     }
-    trip.updatedAt = now
-  })
-  if (!('tripId' in dest)) {
-    finishTrip(tripId, dest.paidTicket)
-    commit((d) => {
-      const t = d.trips[tripId]
-      if (t) Object.assign(t, { finishedAt: dest.when, updatedAt: Date.now() })
+    for (const id of removeIds) {
+      const l = trip.lines.find((x) => x.itemId === id)
+      if (!l || l.status !== 'pego') continue
+      bumpStock(id, -l.qty)
+      l.status = 'faltou'
+      // não foi comprado: volta pra lista como pendente
+      if (finished && !l.extra) putInList(d, id, l.qty, 'pendente')
+    }
+    const total = trip.lines.reduce((s, l) => s + (l.status === 'pego' ? (l.unitPrice ?? 0) * l.qty : 0), 0)
+    Object.assign(trip, {
+      notaAt: now,
+      notaTotal: [...byItem.values()].reduce((s, v) => s + v.total, 0),
+      paidTicket: Math.min(trip.paidTicket, total),
+      updatedAt: now,
     })
-  }
+  })
+}
+
+/** Compra nova direto da nota (quando não passou pelo Modo Mercado). */
+export function importNota(lines: NotaLine[], dest: { shopId: Id; when: number; paidTicket: number }): Id {
+  const tripId = uid()
+  commit((d) => {
+    const now = Date.now()
+    const trip: Trip = { id: tripId, shopId: dest.shopId, kind: 'feira', startedAt: dest.when, finishedAt: null, lines: [], paidTicket: 0, updatedAt: now }
+    d.trips[tripId] = trip
+    const listed = new Set(Object.values(d.list).filter((e) => !e.deleted).map((e) => e.itemId))
+    const byItem = resolveNota(d, lines)
+    for (const [id, v] of byItem) {
+      const { qty, unitPrice } = notaQtyPrice(d.items[id]!, v, d.items[id]!.defaultQty)
+      trip.lines.push({ id: uid(), itemId: id, qty, unitPrice, status: 'pego', extra: !listed.has(id) })
+    }
+    trip.notaAt = now
+    trip.notaTotal = [...byItem.values()].reduce((s, v) => s + v.total, 0)
+  })
+  finishTrip(tripId, dest.paidTicket)
+  commit((d) => {
+    const t = d.trips[tripId]
+    if (t) Object.assign(t, { finishedAt: dest.when, updatedAt: Date.now() })
+  })
   return tripId
+}
+
+/** Compra finalizada há pouco e ainda não conferida com a nota. */
+export function tripToCheck(d: DB): Trip | undefined {
+  return Object.values(d.trips)
+    .filter((t) => !t.deleted && t.finishedAt != null && !t.notaAt && Date.now() - t.finishedAt < 3 * 86_400_000)
+    .sort((a, b) => b.finishedAt! - a.finishedAt!)[0]
 }
 
 // ---------- Ajustes ----------

@@ -87,6 +87,10 @@ export interface Trip extends Base {
   lines: TripLine[]
   /** Quanto foi pago no ticket (o resto foi dinheiro). */
   paidTicket: number
+  /** Quando a compra foi conferida com a nota fiscal. */
+  notaAt?: number
+  /** Total da nota fiscal, quando conferida. */
+  notaTotal?: number
 }
 
 export interface Settings {

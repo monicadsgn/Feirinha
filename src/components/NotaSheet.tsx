@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { brl } from '../data/format'
+import { brl, dateLabel } from '../data/format'
 import { guessShop, matchProduct, fetchNota, type Nota } from '../data/nfce'
 import { ticketLeft } from '../data/logic'
-import { importNota, useDB, type NotaLine } from '../data/store'
+import { activeTrip, applyNotaToTrip, compareNota, importNota, tripToCheck, useDB, type NotaDiff, type NotaLine } from '../data/store'
 import type { Id } from '../data/types'
 import { Sheet, embedded, toast } from './ui'
 
-type Step = 'scan' | 'loading' | 'review'
+type Step = 'scan' | 'loading' | 'map' | 'diff'
 
 /**
- * Lê o QR code da nota fiscal (NFC-e) e transforma numa compra:
- * preços reais, sem digitar. Se tiver uma compra em andamento no Modo
- * Mercado, preenche os preços dela.
+ * Lê o QR code da nota fiscal (NFC-e). O uso principal é em casa, depois da
+ * feira: conferir a compra marcada no Modo Mercado com a nota (preços,
+ * o que esqueceu de marcar, o que não veio). Também serve pra registrar uma
+ * compra que não passou pelo app.
  */
 export function NotaSheet({ tripId, onClose, onDone }: { tripId?: Id; onClose: () => void; onDone: () => void }) {
   const db = useDB()
@@ -20,8 +21,16 @@ export function NotaSheet({ tripId, onClose, onDone }: { tripId?: Id; onClose: (
   const [nota, setNota] = useState<Nota | null>(null)
   const [lines, setLines] = useState<NotaLine[]>([])
   const [pasted, setPasted] = useState('')
+  const [dest, setDest] = useState<Id | 'nova'>('nova')
   const [shopId, setShopId] = useState<Id>('')
   const [paid, setPaid] = useState('')
+  const [diff, setDiff] = useState<NotaDiff | null>(null)
+  const [remove, setRemove] = useState<Set<Id>>(new Set())
+
+  // compras que dá pra conferir: a pedida, a em andamento e a finalizada há pouco
+  const candidates = [tripId ? db.trips[tripId] : undefined, activeTrip(db), tripToCheck(db)].filter(
+    (t, i, a): t is NonNullable<typeof t> => !!t && !t.deleted && a.findIndex((x) => x?.id === t.id) === i,
+  )
 
   const load = async (text: string) => {
     setStep('loading')
@@ -38,7 +47,8 @@ export function NotaSheet({ tripId, onClose, onDone }: { tripId?: Id; onClose: (
       setShopId(guessShop(db, n.store) ?? Object.values(db.shops).find((s) => !s.deleted)?.id ?? '')
       const left = db.settings.ticketMonthly > 0 ? ticketLeft(db) : 0
       setPaid(Math.min(n.total, left).toFixed(2).replace('.', ','))
-      setStep('review')
+      setDest(candidates[0]?.id ?? 'nova')
+      setStep('map')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Não consegui abrir essa nota.')
       setStep('scan')
@@ -51,21 +61,40 @@ export function NotaSheet({ tripId, onClose, onDone }: { tripId?: Id; onClose: (
   const shops = Object.values(db.shops).filter((s) => !s.deleted)
   const matched = lines.filter((l) => l.target !== 'novo' && l.target !== 'ignorar').length
 
-  const save = () => {
-    const when = nota?.date ? new Date(nota.date).getTime() || Date.now() : Date.now()
-    const paidNum = Math.max(0, parseFloat(paid.replace(/\./g, '').replace(',', '.')) || 0)
-    importNota(lines, tripId ? { tripId } : { shopId, when, paidTicket: Math.min(paidNum, nota?.total ?? paidNum) })
-    toast(tripId ? 'Preços da nota preenchidos ✓' : `Compra salva: ${brl(nota?.total ?? 0)} 🧾`)
+  const next = () => {
+    if (dest === 'nova') {
+      const when = nota?.date ? new Date(nota.date).getTime() || Date.now() : Date.now()
+      const paidNum = Math.max(0, parseFloat(paid.replace(/\./g, '').replace(',', '.')) || 0)
+      importNota(lines, { shopId, when, paidTicket: Math.min(paidNum, nota?.total ?? paidNum) })
+      toast(`Compra salva: ${brl(nota?.total ?? 0)} 🧾`)
+      onDone()
+      return
+    }
+    setDiff(compareNota(dest, lines))
+    setRemove(new Set())
+    setStep('diff')
+  }
+
+  const apply = () => {
+    if (dest === 'nova') return
+    applyNotaToTrip(dest, lines, [...remove])
+    toast('Compra conferida com a nota ✓')
     onDone()
   }
 
+  const tripLabel = (id: Id) => {
+    const t = db.trips[id]!
+    const shop = db.shops[t.shopId]?.name ?? 'Mercado'
+    return t.finishedAt == null ? `Compra em andamento (${shop})` : `Compra de ${dateLabel(t.finishedAt)} no ${shop}`
+  }
+
   return (
-    <Sheet onClose={onClose} full={step === 'review'}>
-      {step !== 'review' && (
+    <Sheet onClose={onClose} full={step === 'map' || step === 'diff'}>
+      {(step === 'scan' || step === 'loading') && (
         <div className="stack">
-          <h2>Ler nota fiscal</h2>
+          <h2>Conferir com a nota fiscal</h2>
           <p className="small muted" style={{ margin: 0 }}>
-            Aponte a câmera pro QR code no fim da nota. Os itens e preços vêm do site da Sefaz, sem digitar.
+            Aponte a câmera pro QR code no fim da nota. O app busca os itens e preços na Sefaz e compara com o que foi marcado no mercado.
           </p>
           {step === 'loading' ? (
             <div className="empty">
@@ -97,7 +126,7 @@ export function NotaSheet({ tripId, onClose, onDone }: { tripId?: Id; onClose: (
         </div>
       )}
 
-      {step === 'review' && nota && (
+      {step === 'map' && nota && (
         <>
           <div className="row between">
             <div>
@@ -111,7 +140,7 @@ export function NotaSheet({ tripId, onClose, onDone }: { tripId?: Id; onClose: (
             </button>
           </div>
           <p className="small muted" style={{ margin: '8px 0' }}>
-            Confira a qual item da despensa cada produto corresponde. O app lembra da escolha na próxima nota.
+            1 de 2 · Confira a qual item da despensa cada produto corresponde. O app lembra da escolha na próxima nota.
           </p>
           <div className="list" style={{ overflowY: 'auto', flex: 1 }}>
             {lines.map((l, i) => (
@@ -130,7 +159,7 @@ export function NotaSheet({ tripId, onClose, onDone }: { tripId?: Id; onClose: (
                   style={{ padding: '8px 10px', borderColor: l.target === 'novo' ? 'var(--warn)' : undefined }}
                 >
                   <option value="novo">+ Item novo na despensa</option>
-                  <option value="ignorar">Ignorar (não entra na compra)</option>
+                  <option value="ignorar">Ignorar (sacola, etc.)</option>
                   {items.map((it) => (
                     <option key={it.id} value={it.id}>
                       {it.name}
@@ -141,7 +170,18 @@ export function NotaSheet({ tripId, onClose, onDone }: { tripId?: Id; onClose: (
             ))}
           </div>
           <div className="stack" style={{ paddingTop: 10, gap: 8 }}>
-            {!tripId && (
+            <label className="field">
+              <span>O que fazer com essa nota</span>
+              <select value={dest} onChange={(e) => setDest(e.target.value)}>
+                {candidates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    Conferir: {tripLabel(t.id)}
+                  </option>
+                ))}
+                <option value="nova">Registrar como compra nova</option>
+              </select>
+            </label>
+            {dest === 'nova' && (
               <div className="grid2">
                 <label className="field">
                   <span>Onde</span>
@@ -161,13 +201,118 @@ export function NotaSheet({ tripId, onClose, onDone }: { tripId?: Id; onClose: (
                 )}
               </div>
             )}
-            <button className="btn primary block" onClick={save}>
-              {tripId ? 'Preencher os preços da compra' : 'Salvar compra'}
+            <button className="btn primary block" onClick={next}>
+              {dest === 'nova' ? 'Salvar compra' : 'Ver diferenças'}
             </button>
           </div>
         </>
       )}
+
+      {step === 'diff' && diff && dest !== 'nova' && (
+        <>
+          <div className="row between">
+            <div>
+              <h2>Conferência</h2>
+              <div className="small muted">2 de 2 · {tripLabel(dest)}</div>
+            </div>
+            <button className="btn sm" onClick={() => setStep('map')}>
+              Voltar
+            </button>
+          </div>
+          <div className="stack" style={{ overflowY: 'auto', flex: 1, gap: 12, paddingTop: 10 }}>
+            <div className="grid2">
+              <div className="card" style={{ padding: 12 }}>
+                <div className="small muted">Marcado no app</div>
+                <div className="stat num" style={{ fontSize: 22 }}>
+                  {brl(diff.appTotal)}
+                </div>
+              </div>
+              <div className="card" style={{ padding: 12 }}>
+                <div className="small muted">Na nota</div>
+                <div className="stat num" style={{ fontSize: 22 }}>
+                  {brl(diff.notaTotal)}
+                </div>
+              </div>
+            </div>
+
+            {!diff.priceChanges.length && !diff.filled.length && !diff.added.length && !diff.notInNota.length && (
+              <div className="card" style={{ background: 'var(--primary-soft)' }}>
+                ✓ Tudo bate com a nota.
+              </div>
+            )}
+
+            <DiffGroup title="Preço diferente" hint="Fica o da nota." show={diff.priceChanges.length > 0}>
+              {diff.priceChanges.map((c) => (
+                <div key={c.itemId} className="row between small" style={{ padding: '6px 0' }}>
+                  <span style={{ fontWeight: 700 }}>{c.name}</span>
+                  <span className="num">
+                    <s className="muted">{brl(c.app)}</s> → <b>{brl(c.nota)}</b>
+                  </span>
+                </div>
+              ))}
+            </DiffGroup>
+
+            <DiffGroup title="Estava sem preço" hint="Preenchido com a nota." show={diff.filled.length > 0}>
+              {diff.filled.map((c) => (
+                <div key={c.itemId} className="row between small" style={{ padding: '6px 0' }}>
+                  <span style={{ fontWeight: 700 }}>{c.name}</span>
+                  <b className="num">{brl(c.nota)}</b>
+                </div>
+              ))}
+            </DiffGroup>
+
+            <DiffGroup title="Esqueceu de marcar" hint="Veio na nota e entra na compra." show={diff.added.length > 0}>
+              {diff.added.map((c) => (
+                <div key={c.key} className="row between small" style={{ padding: '6px 0' }}>
+                  <span style={{ fontWeight: 700 }}>{c.name}</span>
+                  <b className="num">{brl(c.total)}</b>
+                </div>
+              ))}
+            </DiffGroup>
+
+            <DiffGroup title="Marcado, mas não está na nota" hint="Marque o que não veio: sai da compra e volta pra lista." show={diff.notInNota.length > 0}>
+              {diff.notInNota.map((c) => (
+                <label key={c.itemId} className="row small" style={{ padding: '6px 0', gap: 10, fontWeight: 700 }}>
+                  <input
+                    type="checkbox"
+                    checked={remove.has(c.itemId)}
+                    onChange={(e) =>
+                      setRemove((s) => {
+                        const n = new Set(s)
+                        if (e.target.checked) n.add(c.itemId)
+                        else n.delete(c.itemId)
+                        return n
+                      })
+                    }
+                    style={{ width: 20, height: 20 }}
+                  />
+                  <span className="grow">{c.name}</span>
+                  <span className="muted" style={{ fontWeight: 500 }}>
+                    {remove.has(c.itemId) ? 'não veio' : 'mantém'}
+                  </span>
+                </label>
+              ))}
+            </DiffGroup>
+          </div>
+          <button className="btn primary block" style={{ marginTop: 10 }} onClick={apply}>
+            Corrigir a compra
+          </button>
+        </>
+      )}
     </Sheet>
+  )
+}
+
+function DiffGroup({ title, hint, show, children }: { title: string; hint: string; show: boolean; children: React.ReactNode }) {
+  if (!show) return null
+  return (
+    <div className="card" style={{ padding: 12 }}>
+      <div style={{ fontWeight: 800 }}>{title}</div>
+      <div className="small muted" style={{ marginBottom: 4 }}>
+        {hint}
+      </div>
+      {children}
+    </div>
   )
 }
 

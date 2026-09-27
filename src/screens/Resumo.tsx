@@ -14,13 +14,13 @@ export function Resumo({ openItem }: { openItem: (id: Id) => void }) {
   const [sort, setSort] = useState<Sort>('gasto')
   const [openTrip, setOpenTrip] = useState<Id | null>(null)
   const [hover, setHover] = useState<string | null>(null)
-  const [nota, setNota] = useState(false)
+  const [nota, setNota] = useState<Id | true | false>(false)
   const notaBtn = (
     <button className="btn sm" onClick={() => setNota(true)}>
       🧾 Ler nota
     </button>
   )
-  const notaSheet = nota && <NotaSheet onClose={() => setNota(false)} onDone={() => setNota(false)} />
+  const notaSheet = nota !== false && <NotaSheet tripId={nota === true ? undefined : nota} onClose={() => setNota(false)} onDone={() => setNota(false)} />
 
   const trips = finishedTrips(db)
   const start = cycleStart(db.settings.ticketDay)
@@ -237,7 +237,7 @@ export function Resumo({ openItem }: { openItem: (id: Id) => void }) {
                   <div className="grow">
                     <div className="title">{db.shops[t.shopId]?.name ?? 'Mercado'}</div>
                     <div className="small muted">
-                      {dateLabel(t.finishedAt!)} · {t.kind === 'feira' ? 'feira do mês' : 'reposição'} · {tt.picked} itens
+                      {dateLabel(t.finishedAt!)} · {t.kind === 'feira' ? 'feira do mês' : 'reposição'} · {tt.picked} itens{t.notaAt ? ' · ✓ nota' : ''}
                     </div>
                   </div>
                   <b className="num">{brl(tt.total)}</b>
@@ -256,6 +256,9 @@ export function Resumo({ openItem }: { openItem: (id: Id) => void }) {
                           </span>
                         </div>
                       ))}
+                    <button className="btn sm block" style={{ marginTop: 8 }} onClick={() => setNota(t.id)}>
+                      🧾 {t.notaAt ? 'Conferir de novo com a nota' : 'Conferir com a nota fiscal'}
+                    </button>
                     <div className="row between" style={{ marginTop: 8 }}>
                       <span className="muted">
                         Ticket {brl(t.paidTicket)} · dinheiro {brl(Math.max(0, tt.total - t.paidTicket))}

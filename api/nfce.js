@@ -74,7 +74,8 @@ export default async function handler(req, res) {
     const html = /iso-8859-1|latin1|windows-1252/i.test(ct) || /charset=["']?iso-8859-1/i.test(buf.toString('latin1', 0, 2000)) ? buf.toString('latin1') : buf.toString('utf8')
     const nota = parseNota(html)
     if (!nota.items.length) {
-      return res.status(422).json({ error: 'Abri a nota mas não consegui ler os itens desse estado ainda.', host: url.hostname, status: r.status })
+      const debug = req.query.debug ? { sample: html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').slice(0, 6000) } : {}
+      return res.status(422).json({ error: 'Abri a nota mas não consegui ler os itens desse estado ainda.', host: url.hostname, status: r.status, ...debug })
     }
     return res.status(200).json(nota)
   } catch (e) {

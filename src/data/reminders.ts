@@ -2,7 +2,7 @@ import { brl, DAY } from './format'
 import { cycleStart, daysUntilFeira, nextFeira, ticketLeft } from './logic'
 import type { DB } from './types'
 
-export type ReminderAction = 'review' | 'acabou' | 'lista' | 'mercado' | 'refazer'
+export type ReminderAction = 'review' | 'acabou' | 'lista' | 'mercado' | 'refazer' | 'nota'
 
 export interface Reminder {
   /** Muda a cada ciclo/dia, pra que dispensar valha só até o próximo. */
@@ -40,6 +40,19 @@ export function reminders(db: DB, now = Date.now()): Reminder[] {
   const nextCycle = new Date(nextFeira(s.ticketDay, now)).toISOString().slice(0, 10)
   const today = new Date(now).toISOString().slice(0, 10)
   const shopping = Object.values(db.trips).some((t) => !t.deleted && t.finishedAt == null)
+
+  // Voltou da feira: conferir com a nota fiscal
+  const check = Object.values(db.trips)
+    .filter((t) => !t.deleted && t.finishedAt != null && !t.notaAt && now - t.finishedAt < 3 * DAY)
+    .sort((a, b) => b.finishedAt! - a.finishedAt!)[0]
+  if (check) {
+    out.push({
+      key: `nota-${check.id}`,
+      icon: '🧾',
+      text: 'Chegou da feira? Confira a compra com a nota fiscal: preços, o que esqueceu de marcar e o que não veio.',
+      action: { label: 'Conferir', run: 'nota' },
+    })
+  }
 
   // Ticket caiu (primeiros 2 dias do ciclo)
   if (s.ticketMonthly > 0 && now - cycle < 2 * DAY) {

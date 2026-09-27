@@ -794,3 +794,7 @@ table.tbl {
   border-bottom: 1px solid var(--line);
 }
 [hidden] { display: none !important; }
+
+input[type='checkbox'] {
+  accent-color: var(--primary);
+}

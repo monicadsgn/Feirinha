@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ItemEditor } from './components/ItemEditor'
+import { NotaSheet } from './components/NotaSheet'
 import { QuickAdd, suggestPair, type QuickMode } from './components/QuickAdd'
 import { ConfirmHost, Toasts, confirmAction, toast } from './components/ui'
 import { activeTrip, addItem, addToList, findItemByName, getDB, redoOnboarding, updateSettings, useDB } from './data/store'
@@ -32,6 +33,7 @@ export function App() {
   const [item, setItem] = useState<Id | null>(null)
   const [review, setReview] = useState(false)
   const [settings, setSettings] = useState(false)
+  const [nota, setNota] = useState(false)
   const [share, setShare] = useState<{ title?: string; text?: string; url?: string } | null>(null)
   const [joining, setJoining] = useState(() => syncAvailable && new URLSearchParams(location.search).has('casa'))
 
@@ -98,7 +100,9 @@ export function App() {
           onReminder={(a) =>
             a === 'review'
               ? setReview(true)
-              : a === 'acabou'
+              : a === 'nota'
+                ? setNota(true)
+                : a === 'acabou'
                 ? setQuick('acabou')
                 : a === 'refazer'
                   ? confirmAction('Refazer o cadastro? A despensa e a lista atuais são apagadas. Nome, ticket e lugares continuam.', 'Refazer', redoOnboarding)
@@ -142,6 +146,7 @@ export function App() {
         />
       )}
       {settings && <Ajustes onClose={() => setSettings(false)} />}
+      {nota && <NotaSheet onClose={() => setNota(false)} onDone={() => setNota(false)} />}
       {!db.settings.me && <WhoAmI people={db.settings.people} />}
       <Toasts />
       <ConfirmHost />

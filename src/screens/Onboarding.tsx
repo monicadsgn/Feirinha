@@ -1,8 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { clearDraft, useDraft } from '../components/ui'
 import { CATEGORIES, SEED_ITEMS } from '../data/catalog'
 import { qtyLabel } from '../data/format'
 import { finishOnboarding, getDB, importText } from '../data/store'
+import { joinCasa, leaveCasa, syncAvailable } from '../data/sync'
 import type { CategoryId } from '../data/types'
 
 /** Primeiro acesso: nome, ticket e o que vocês costumam comprar. */
@@ -85,6 +86,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         </div>
       )}
 
+      {step === 0 && syncAvailable && <JoinCard />}
+
       {step === 1 && (
         <>
           <div className="card">
@@ -148,6 +151,58 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           </button>
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * Já tem casa em outro celular (ou no Safari, antes de instalar): entra com o
+ * link de convite, sem refazer o cadastro. No iPhone o app instalado não
+ * tem barra de endereço, então o link é colado aqui.
+ */
+function JoinCard() {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const code = (() => {
+    const t = text.trim()
+    const m = t.match(/[?&]casa=([\w-]+)/)
+    if (m) return m[1]!
+    return /^[\w-]{20,}$/.test(t) ? t : null
+  })()
+
+  if (!open)
+    return (
+      <button className="btn ghost block" onClick={() => setOpen(true)}>
+        Já usamos o Feirinha em outro celular: entrar na casa
+      </button>
+    )
+
+  return (
+    <div className="card stack">
+      <h3>Entrar na casa</h3>
+      <p className="small muted" style={{ margin: 0 }}>
+        Em outro celular (ou no navegador onde você já usa o app), vá em ⚙️ → Compartilhar a casa → Copiar link. Cole aqui:
+      </p>
+      <input id="join-link" inputMode="url" placeholder="https://…?casa=…" value={text} onChange={(e) => setText(e.target.value)} />
+      {error && <div className="small" style={{ color: 'var(--accent)' }}>{error}</div>}
+      <button
+        className="btn primary block"
+        disabled={!code || busy}
+        onClick={async () => {
+          setBusy(true)
+          setError(null)
+          await joinCasa(code!)
+          setBusy(false)
+          if (!getDB().settings.onboarded) {
+            leaveCasa()
+            setError('Não achei essa casa. Confira se copiou o link inteiro.')
+          } else clearDraft('cadastro:')
+        }}
+      >
+        {busy ? 'Entrando…' : 'Entrar'}
+      </button>
     </div>
   )
 }

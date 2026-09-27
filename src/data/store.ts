@@ -1,12 +1,12 @@
 import { useSyncExternalStore } from 'react'
 import { CATALOG_V3_NEW, CATALOG_V3_REMOVED, CATALOG_V3_RENAMES, DEFAULT_AISLES, SEED_ITEMS, SEED_SHOPS, guessCategory, type SeedItem } from './catalog'
-import { estimateStock, suggestBuyQty } from './logic'
+import { countOf, estimateStock, suggestBuyQty, suggestCount } from './logic'
 import { normalize } from './format'
 import { prettyName } from './nfce'
 import type { DB, EntryReason, Id, Item, ListEntry, SavedRecipe, Settings, Shop, Trip, TripKind, TripLine } from './types'
 
 const KEY = 'feirinha:v1'
-export const CATALOG_VERSION = 3
+export const CATALOG_VERSION = 4
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
 
@@ -261,7 +261,7 @@ export function markOut(itemId: Id) {
   commit((d) => {
     const it = d.items[itemId]
     if (!it) return
-    Object.assign(touch(it), { stockQty: 0, stockAt: Date.now() })
+    Object.assign(touch(it), { stockQty: 0, stockAt: Date.now(), opened: 0 })
     putInList(d, itemId, it.defaultQty, 'acabou')
   })
 }
@@ -272,9 +272,11 @@ export function consumeOne(itemId: Id) {
     const it = d.items[itemId]
     if (!it) return
     const est = estimateStock(d, it) ?? it.defaultQty
-    const step = it.unit === 'kg' ? Math.min(0.5, est) : 1
+    // de contar: se tem uma aberta, é ela que acabou (valia meia)
+    const opened = it.count ? (countOf(d, it)?.opened ?? 0) : 0
+    const step = opened > 0 ? 0.5 : it.unit === 'kg' ? Math.min(0.5, est) : 1
     const left = Math.max(0, +(est - step).toFixed(2))
-    Object.assign(touch(it), { stockQty: left, stockAt: Date.now() })
+    Object.assign(touch(it), { stockQty: left, stockAt: Date.now(), ...(it.count ? { opened: Math.max(0, opened - 1) } : {}) })
     if (left <= 0) putInList(d, itemId, it.defaultQty, 'acabou')
   })
 }
@@ -286,10 +288,32 @@ export function setStock(itemId: Id, qty: number | null) {
   })
 }
 
+/** De contar: quantas fechadas e abertas tem agora. */
+export function setCount(itemId: Id, closed: number, opened: number) {
+  commit((d) => {
+    const it = d.items[itemId]
+    if (it) Object.assign(touch(it), { stockQty: closed + opened * 0.5, stockAt: Date.now(), opened })
+  })
+}
+
+/** Liga/desliga "de contar" em vários itens de uma vez. */
+export function setCounted(on: Id[], off: Id[]) {
+  commit((d) => {
+    for (const id of on) {
+      const it = d.items[id]
+      if (it && !it.count) touch(it).count = true
+    }
+    for (const id of off) {
+      const it = d.items[id]
+      if (it && it.count) Object.assign(touch(it), { count: false, opened: 0 })
+    }
+  })
+}
+
 export type ReviewAnswer = 'ok' | 'pouco' | 'acabou' | 'naouso'
 
 /** Resultado da revisão da despensa: atualiza estoque e monta a lista. */
-export function applyReview(answers: Record<Id, { answer: ReviewAnswer; buy: number }>) {
+export function applyReview(answers: Record<Id, { answer: ReviewAnswer; buy: number; count?: { closed: number; opened: number } }>) {
   commit((d) => {
     const now = Date.now()
     for (const [itemId, { answer, buy }] of Object.entries(answers)) {
@@ -299,6 +323,12 @@ export function applyReview(answers: Record<Id, { answer: ReviewAnswer; buy: num
         // não faz parte da casa: sai da despensa e da lista
         touch(it).deleted = true
         for (const e of Object.values(d.list)) if (e.itemId === itemId && !e.deleted) touch(e).deleted = true
+        continue
+      }
+      if (answers[itemId]!.count) {
+        const c = answers[itemId]!.count!
+        Object.assign(touch(it), { stockQty: c.closed + c.opened * 0.5, stockAt: now, opened: c.opened })
+        if (answer !== 'ok' && buy > 0) putInList(d, itemId, buy, answer === 'acabou' ? 'acabou' : 'revisao', true)
         continue
       }
       const est = estimateStock(d, it)
@@ -734,6 +764,7 @@ function seedToItem(s: SeedItem, keys: Set<string>, now: number): Item {
     note: s.note && s.origin === 'lista' ? s.note : undefined,
     shopId: s.shop,
     pairs: (s.pairs ?? []).filter((p) => keys.has(p)),
+    count: suggestCount({ unit: s.unit, defaultQty: s.qty, place: s.place, category: s.category }) || undefined,
     stockQty: null,
     stockAt: null,
     updatedAt: now,
@@ -742,6 +773,22 @@ function seedToItem(s: SeedItem, keys: Set<string>, now: number): Item {
 
 /** Atualiza o catálogo de quem cadastrou numa versão anterior. Roda uma vez por celular. */
 export function runMigrations() {
+  migrateV3()
+  migrateV4()
+}
+
+/** v4: itens "de contar" (quantas embalagens tem), sugeridos pelo tipo de item. */
+function migrateV4() {
+  const s = db.settings
+  if (!s.onboarded || (s.catalogVersion ?? 1) !== 3) return
+  commit((d) => {
+    const now = Date.now()
+    for (const it of Object.values(d.items)) if (!it.deleted && it.count === undefined && suggestCount(it)) Object.assign(it, { count: true, updatedAt: now })
+    d.settings.catalogVersion = 4
+  })
+}
+
+function migrateV3() {
   const s = db.settings
   if (!s.onboarded || (s.catalogVersion ?? 1) !== 2) return
   commit((d) => {

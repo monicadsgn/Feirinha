@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Arrumar } from '../components/Arrumar'
+import { CountStepper } from '../components/Count'
 import { suggestPair, type QuickMode } from '../components/QuickAdd'
 import { hasDraft, toastUndo } from '../components/ui'
 import { PLACES, PLACE_ORDER } from '../data/catalog'
 import { brl, daysLabel, qtyLabel } from '../data/format'
-import { daysUntilFeira, journey, listItemIds, listEstimate, stockInfo, type StockInfo } from '../data/logic'
+import { countOf, daysUntilFeira, journey, listItemIds, listEstimate, minOf, stockInfo, type StockInfo } from '../data/logic'
 import { dismiss, reminders, type ReminderAction } from '../data/reminders'
-import { addToList, markOut, skipNota, undoable, useDB } from '../data/store'
+import { addToList, markOut, setCount, skipNota, undoable, useDB } from '../data/store'
 import type { Id, Item, PlaceId } from '../data/types'
 
 type Go = 'lista' | 'mercado'
@@ -45,7 +46,7 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
   const [place, setPlace] = useState<PlaceId | 'todos'>('todos')
   const [filter, setFilter] = useState<Status | 'todos'>('todos')
   const [, setTick] = useState(0)
-  const [arrumar, setArrumar] = useState(false)
+  const [arrumar, setArrumar] = useState<false | 'uso' | 'contar'>(false)
   const notes = reminders(db).slice(0, 2)
   const inList = listItemIds(db)
   const days = daysUntilFeira(db.settings.ticketDay)
@@ -213,9 +214,14 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
       <div className="section">
         <div className="section-title">
           <span>O que tem em casa</span>
-          <button className="btn sm ghost" style={{ minHeight: 30, padding: '0 6px' }} onClick={() => setArrumar(true)}>
-            Arrumar
-          </button>
+          <span className="row" style={{ gap: 2 }}>
+            <button className="btn sm ghost" style={{ minHeight: 30, padding: '0 6px' }} onClick={() => setArrumar('contar')}>
+              O que contar
+            </button>
+            <button className="btn sm ghost" style={{ minHeight: 30, padding: '0 6px' }} onClick={() => setArrumar('uso')}>
+              Arrumar
+            </button>
+          </span>
         </div>
         <div className="chips">
           <button className={'chip' + (filter === 'todos' ? ' on' : '')} onClick={() => setFilter('todos')}>
@@ -267,7 +273,7 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
         </div>
       )}
 
-      {arrumar && <Arrumar onClose={() => setArrumar(false)} />}
+      {arrumar && <Arrumar mode={arrumar} onClose={() => setArrumar(false)} />}
 
       {rows.length === 0 && (
         <div className="empty">
@@ -281,6 +287,28 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
 
 function PantryRow({ item, s, inList, onOpen }: { item: Item; s: StockInfo; inList: boolean; onOpen: () => void }) {
   const st = statusOf(s)
+  const db = useDB()
+  if (item.count) {
+    const c = countOf(db, item)
+    const fresh = item.stockAt != null && Date.now() - item.stockAt < 86_400_000
+    return (
+      <div className="li pantry" onClick={onOpen}>
+        <div className="grow" style={{ minWidth: 0 }}>
+          <div className="title ellipsis">{item.name}</div>
+          <div className="row small" style={{ gap: 6, marginTop: 2 }}>
+            <span className={'status-tag ' + st.key}>{st.label}</span>
+            <span className="muted ellipsis">
+              {!c ? 'não contado · ' : c.opened ? `${c.opened} ${c.opened > 1 ? 'abertos' : 'aberto'} · ` : !fresh ? '~ ' : ''}
+              {inList ? 'na lista' : `mín. ${minOf(item)}`}
+            </span>
+          </div>
+        </div>
+        <span onClick={(e) => e.stopPropagation()}>
+          <CountStepper item={item} value={c ?? { closed: 0, opened: 0 }} onChange={(v) => setCount(item.id, v.closed, v.opened)} />
+        </span>
+      </div>
+    )
+  }
   const detail =
     s.est == null
       ? (item.note ?? `costuma levar ${qtyLabel(item.defaultQty, item.unit)}`)

@@ -1,5 +1,5 @@
 import { DAY } from './format'
-import type { CategoryId, DB, Id, Item, Trip } from './types'
+import type { CategoryId, DB, Id, Item, Trip, Unit } from './types'
 
 /**
  * Estoque estimado: a gente não depende de você lembrar de atualizar.
@@ -54,6 +54,31 @@ export function estimateStock(db: DB, item: Item, now = Date.now()): number | nu
   return Math.max(0, item.stockQty - dailyRate(db, item) * days)
 }
 
+// ---------- Itens de contar ----------
+
+const COUNT_UNITS: Unit[] = ['un', 'pct', 'cx', 'lata', 'rolo', 'bandeja', 'dz']
+
+/** Sugestão de "de contar": fica no armário/geladeira/freezer e vem em mais de uma embalagem. */
+export function suggestCount(it: Pick<Item, 'unit' | 'defaultQty' | 'place' | 'category'>): boolean {
+  return COUNT_UNITS.includes(it.unit) && it.defaultQty >= 2 && ['armario', 'geladeira', 'freezer'].includes(it.place) && it.category !== 'hortifruti'
+}
+
+/** Compra quando tiver isso ou menos. */
+export function minOf(it: Item): number {
+  return it.minQty ?? Math.max(1, Math.round(it.defaultQty / 3))
+}
+
+/** Quantas fechadas e abertas tem agora (a estimativa gasta primeiro as fechadas). */
+export function countOf(db: DB, it: Item, now = Date.now()): { closed: number; opened: number; total: number } | null {
+  const est = estimateStock(db, it, now)
+  if (est == null) return null
+  // arredonda pra meia embalagem, senão o consumo de poucas horas "fecha" a aberta
+  const r = Math.round(est * 2) / 2
+  const opened = Math.min(it.opened ?? 0, r * 2)
+  const closed = Math.max(0, Math.round(r - opened * 0.5))
+  return { closed, opened, total: closed + opened * 0.5 }
+}
+
 export type StockStatus = 'acabou' | 'acabando' | 'ok' | 'desconhecido'
 
 export interface StockInfo {
@@ -73,7 +98,17 @@ export function stockInfo(db: DB, item: Item, now = Date.now()): StockInfo {
   const daysLeft = rate > 0 ? est / rate : Infinity
   // "acabou" pela estimativa só quando sobrou menos de ~5% do padrão;
   // "pouco" com menos de ~1/3 do que costuma levar (é o que a revisão grava) ou uma semana de uso
-  const status: StockStatus = est <= item.defaultQty * 0.05 ? 'acabou' : est <= item.defaultQty * 0.3 || daysLeft <= 7 ? 'acabando' : 'ok'
+  const status: StockStatus = item.count
+    ? est < 0.25
+      ? 'acabou'
+      : est <= minOf(item)
+        ? 'acabando'
+        : 'ok'
+    : est <= item.defaultQty * 0.05
+      ? 'acabou'
+      : est <= item.defaultQty * 0.3 || daysLeft <= 7
+        ? 'acabando'
+        : 'ok'
   return { est, daysLeft, status, shortBeforeFeira: daysLeft < daysUntilFeira(db.settings.ticketDay, now), confirmedOut: item.stockQty === 0 }
 }
 

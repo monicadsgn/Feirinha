@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { CATEGORIES, EVERY_OPTIONS, PLACES, PLACE_ORDER, UNITS, UNIT_NAMES } from '../data/catalog'
 import { brl, dateLabel, qtyLabel } from '../data/format'
-import { itemStats, purchasesOf, stockInfo } from '../data/logic'
-import { deleteItem, setStock, updateItem, useDB } from '../data/store'
+import { countOf, itemStats, minOf, purchasesOf, stockInfo } from '../data/logic'
+import { deleteItem, setCount, setStock, updateItem, useDB } from '../data/store'
 import type { CategoryId, Id, PlaceId, Unit } from '../data/types'
+import { CountExtras, CountStepper } from './Count'
 import { Sheet, Stepper, confirmAction } from './ui'
 
 export function ItemEditor({ itemId, onClose }: { itemId: Id; onClose: () => void }) {
@@ -34,23 +35,63 @@ export function ItemEditor({ itemId, onClose }: { itemId: Id; onClose: () => voi
           />
         </div>
 
-        <div className="card">
-          <h3 style={{ marginBottom: 8 }}>Quanto tem em casa?</h3>
-          <div className="row between">
-            <div className="muted small">
-              {s.est == null
-                ? 'Ainda não sei. Informe e o app passa a estimar sozinho.'
-                : `Estimativa: ~${qtyLabel(+s.est.toFixed(1), item.unit)}${s.daysLeft != null && isFinite(s.daysLeft) ? ` · dura ~${Math.round(s.daysLeft)} dias` : ''}`}
-            </div>
-          </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <Stepper value={+(s.est ?? 0).toFixed(1)} unit={item.unit} onChange={(v) => setStock(item.id, v)} />
-            {s.est != null && (
-              <button className="btn sm ghost" onClick={() => setStock(item.id, null)}>
-                Não sei
-              </button>
-            )}
-          </div>
+        <div className="card stack" style={{ gap: 10 }}>
+          <h3 style={{ margin: 0 }}>Quanto tem em casa?</h3>
+          {item.count ? (
+            <>
+              {(() => {
+                const c = countOf(db, item) ?? { closed: 0, opened: 0 }
+                const set = (v: { closed: number; opened: number }) => setCount(item.id, v.closed, v.opened)
+                return (
+                  <>
+                    <div className="row between">
+                      <span className="small" style={{ fontWeight: 700 }}>
+                        Fechados
+                      </span>
+                      <CountStepper item={item} value={c} onChange={set} />
+                    </div>
+                    <div className="row wrap" style={{ gap: 6 }}>
+                      <CountExtras item={item} value={c} onChange={set} />
+                    </div>
+                  </>
+                )
+              })()}
+              <div className="row between">
+                <span className="small" style={{ fontWeight: 700 }}>
+                  Compra quando tiver
+                </span>
+                <Stepper value={minOf(item)} unit={item.unit} onChange={(v) => updateItem(item.id, { minQty: Math.round(v) })} />
+              </div>
+              <label className="check-row small">
+                <input type="checkbox" checked={!!item.big} onChange={(e) => updateItem(item.id, { big: e.target.checked || undefined })} />
+                Às vezes vem no tamanho grande (1 grande conta como 2)
+              </label>
+              <div className="small muted">
+                O app vai gastando o número sozinho pelo consumo da casa; “Usei 1”, a revisão e a nota corrigem.
+                {s.est == null && ' Ainda não foi contado.'}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="muted small">
+                {s.est == null
+                  ? 'Ainda não sei. Informe e o app passa a estimar sozinho.'
+                  : `Estimativa: ~${qtyLabel(+s.est.toFixed(1), item.unit)}${s.daysLeft != null && isFinite(s.daysLeft) ? ` · dura ~${Math.round(s.daysLeft)} dias` : ''}`}
+              </div>
+              <div className="row">
+                <Stepper value={+(s.est ?? 0).toFixed(1)} unit={item.unit} onChange={(v) => setStock(item.id, v)} />
+                {s.est != null && (
+                  <button className="btn sm ghost" onClick={() => setStock(item.id, null)}>
+                    Não sei
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+          <label className="check-row small" style={{ fontWeight: 700 }}>
+            <input type="checkbox" checked={!!item.count} onChange={(e) => updateItem(item.id, { count: e.target.checked, ...(e.target.checked ? {} : { opened: 0 }) })} />
+            Contar quantos tem (caixas, pacotes…)
+          </label>
         </div>
 
         <div className="grid2">

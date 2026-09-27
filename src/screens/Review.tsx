@@ -1,12 +1,21 @@
 import { useMemo } from 'react'
+import { CountExtras, CountStepper, countTotal, type CountValue } from '../components/Count'
 import { Sheet, Stepper, clearDraft, toast, useDraft } from '../components/ui'
 import { PLACES, PLACE_ORDER } from '../data/catalog'
 import { qtyLabel } from '../data/format'
-import { listItemIds, stockInfo, suggestBuyQty } from '../data/logic'
+import { countOf, listItemIds, minOf, stockInfo, suggestBuyQty } from '../data/logic'
 import { applyReview, useDB, type ReviewAnswer } from '../data/store'
 import type { Id, Item } from '../data/types'
 
-type Answers = Record<Id, { answer: ReviewAnswer; buy: number }>
+type Answer = { answer: ReviewAnswer; buy: number; count?: CountValue }
+type Answers = Record<Id, Answer>
+
+/** De contar: a situação sai da quantidade (zero = não tem, até o mínimo = pouco). */
+function fromCount(it: Item, c: CountValue): Answer {
+  const t = countTotal(c)
+  const answer: ReviewAnswer = t < 0.25 ? 'acabou' : t <= minOf(it) ? 'pouco' : 'ok'
+  return { answer, buy: answer === 'ok' ? 0 : Math.max(1, Math.ceil(it.defaultQty - t)), count: c }
+}
 
 const NEXT: Record<ReviewAnswer, ReviewAnswer> = { ok: 'pouco', pouco: 'acabou', acabou: 'naouso', naouso: 'ok' }
 const LABEL: Record<ReviewAnswer, string> = { ok: 'Tem', pouco: 'Pouco', acabou: 'Não tem', naouso: 'Não uso' }
@@ -26,6 +35,7 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
   const [answers, setAnswers] = useDraft<Answers>('revisao:respostas', () => {
     const a: Answers = {}
     for (const i of items) {
+      if (i.count) continue
       const s = stockInfo(db, i)
       if (s.status === 'acabou') a[i.id] = { answer: 'acabou', buy: i.defaultQty }
       else if (s.status === 'acabando' || s.shortBeforeFeira) a[i.id] = { answer: 'pouco', buy: suggestBuyQty(db, i) }
@@ -36,8 +46,14 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
   const cur = Math.min(step, places.length - 1)
   const place = places[cur]
   const group = items.filter((i) => i.place === place).sort((a, b) => a.name.localeCompare(b.name))
-  const answerOf = (id: Id): ReviewAnswer => answers[id]?.answer ?? 'ok'
-  const buyingIn = (list: Item[]) => list.filter((i) => (answerOf(i.id) === 'pouco' || answerOf(i.id) === 'acabou') && (answers[i.id]?.buy ?? 0) > 0).length
+  // de contar sem resposta: parte do que o app estima (ou do que costuma levar, se nunca contou)
+  const baseCount = (it: Item): CountValue => {
+    const c = countOf(db, it)
+    return c ? { closed: c.closed, opened: c.opened } : { closed: Math.round(it.defaultQty), opened: 0 }
+  }
+  const eff = (it: Item): Answer => answers[it.id] ?? (it.count ? fromCount(it, baseCount(it)) : { answer: 'ok', buy: 0 })
+  const answerOf = (id: Id): ReviewAnswer => eff(db.items[id]!).answer
+  const buyingIn = (list: Item[]) => list.filter((i) => (answerOf(i.id) === 'pouco' || answerOf(i.id) === 'acabou') && eff(i).buy > 0).length
   const toBuy = buyingIn(items)
 
   const cycle = (it: Item) => {
@@ -53,8 +69,8 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
 
   const finish = () => {
     // quem passou pela revisão viu tudo: o que não foi tocado conta como "tem"
-    const all = { ...answers }
-    for (const i of items) if (!all[i.id]) all[i.id] = { answer: 'ok', buy: 0 }
+    const all: Answers = {}
+    for (const i of items) all[i.id] = eff(i)
     applyReview(all)
     clearDraft('revisao:')
     const gone = Object.values(all).filter((x) => x.answer === 'naouso').length
@@ -70,6 +86,54 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
     )
 
   const here = buyingIn(group)
+
+  function countRow(it: Item) {
+    const a = eff(it)
+    const c = a.count ?? baseCount(it)
+    const set = (v: CountValue) => setAnswers((x) => ({ ...x, [it.id]: fromCount(it, v) }))
+    if (a.answer === 'naouso')
+      return (
+        <div key={it.id} className="li" style={{ minHeight: 0, padding: '10px 14px' }}>
+          <div className="grow title muted" style={{ textDecoration: 'line-through' }}>
+            {it.name}
+          </div>
+          <button className="link-btn" onClick={() => set(c)}>
+            desfazer
+          </button>
+        </div>
+      )
+    const tag = a.answer === 'acabou' ? ['Não tem', 'acabou'] : a.answer === 'pouco' ? ['Pouco', 'pouco'] : null
+    return (
+      <div key={it.id} className="li" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8, padding: '10px 14px', minHeight: 0 }}>
+        <div className="row" style={{ gap: 10 }}>
+          <div className="grow" style={{ minWidth: 0 }}>
+            <div className="title ellipsis">{it.name}</div>
+            <div className="small muted ellipsis">
+              {tag && <span className={'status-tag ' + tag[1]} style={{ marginRight: 6 }}>{tag[0]}</span>}
+              compra com {qtyLabel(minOf(it), it.unit)}
+              {it.note ? ` · ${it.note}` : ''}
+            </div>
+          </div>
+          <CountStepper item={it} value={c} onChange={set} />
+        </div>
+        <div className="row wrap" style={{ gap: 6 }}>
+          <CountExtras item={it} value={c} onChange={set} />
+          <span className="grow" />
+          <button className="link-btn" onClick={() => setAnswers((x) => ({ ...x, [it.id]: { answer: 'naouso', buy: 0, count: c } }))}>
+            não uso
+          </button>
+        </div>
+        {a.answer !== 'ok' && (
+          <div className="row between">
+            <span className="small" style={{ fontWeight: 700 }}>
+              Comprar
+            </span>
+            <Stepper value={a.buy} unit={it.unit} onChange={(v) => setAnswers((x) => ({ ...x, [it.id]: { ...a, count: c, buy: v } }))} />
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <Sheet onClose={onClose} full>
@@ -100,10 +164,12 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
 
       <p className="muted small" style={{ margin: '0 0 8px' }}>
         Tudo começa como <b>Tem</b>. Toque só no que está acabando: 1 toque = <b>Pouco</b>, 2 = <b>Não tem</b> (vai pra lista), 3 = <b>Não uso</b> (sai da despensa).
+        Nos itens com <b>− +</b>, conte as embalagens fechadas; as <b>abertas</b> valem meia.
       </p>
 
       <div className="list" style={{ overflowY: 'auto', flex: 1 }}>
         {group.map((it) => {
+          if (it.count) return countRow(it)
           const ans = answerOf(it.id)
           const a = answers[it.id]
           const s = stockInfo(db, it)

@@ -1004,3 +1004,53 @@ input[type='checkbox'] {
   overflow: hidden;
   line-height: 1.25;
 }
+
+/* itens de contar: abertos e tamanho grande */
+.mini-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.mini-step button {
+  width: 30px;
+  height: 30px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--primary);
+}
+.mini-step span {
+  min-width: 64px;
+  text-align: center;
+}
+.mini-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.link-btn {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 4px 2px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+.check-row input {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}

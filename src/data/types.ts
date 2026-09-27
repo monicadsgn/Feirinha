@@ -56,6 +56,14 @@ export interface Item extends Base {
   shopId: Id
   /** Itens que costumam andar juntos (macarrão → molho). */
   pairs: Id[]
+  /** "De contar": a despensa guarda quantas embalagens tem (não só tem/não tem). */
+  count?: boolean
+  /** De contar: compra quando tiver isso ou menos. Sem valor = ~1/3 do que costuma levar. */
+  minQty?: number
+  /** De contar: quantas embalagens estão abertas (cada uma vale meia no estoque). */
+  opened?: number
+  /** De contar: às vezes vem no tamanho grande, que conta como 2. */
+  big?: boolean
   /** Último estoque conhecido e quando foi informado. null = não sei. */
   stockQty: number | null
   stockAt: number | null

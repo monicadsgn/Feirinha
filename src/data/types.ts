@@ -1,0 +1,101 @@
+export type Id = string
+
+/** Todo registro tem id + updatedAt para permitir sincronizar entre celulares depois. */
+export interface Base {
+  id: Id
+  updatedAt: number
+  deleted?: boolean
+}
+
+export type CategoryId =
+  | 'hortifruti'
+  | 'acougue'
+  | 'frios'
+  | 'padaria'
+  | 'mercearia'
+  | 'matinais'
+  | 'temperos'
+  | 'bebidas'
+  | 'congelados'
+  | 'besteiras'
+  | 'limpeza'
+  | 'higiene'
+  | 'casa'
+  | 'pet'
+  | 'outros'
+
+/** Onde o item fica em casa — usado na revisão da despensa. */
+export type PlaceId = 'geladeira' | 'freezer' | 'armario' | 'fruteira' | 'limpeza' | 'banheiro' | 'outros'
+
+export type Unit = 'un' | 'pct' | 'kg' | 'g' | 'L' | 'cx' | 'dz' | 'lata' | 'rolo'
+
+export interface Shop extends Base {
+  name: string
+  emoji: string
+  /** Ordem dos corredores (categorias) do jeito que vocês andam no mercado. */
+  aisles: CategoryId[]
+}
+
+export interface Item extends Base {
+  name: string
+  category: CategoryId
+  place: PlaceId
+  unit: Unit
+  /** Quanto costuma comprar numa feira. */
+  defaultQty: number
+  shopId: Id
+  /** Itens que costumam andar juntos (macarrão → molho). */
+  pairs: Id[]
+  /** Último estoque conhecido e quando foi informado. null = não sei. */
+  stockQty: number | null
+  stockAt: number | null
+}
+
+export type EntryReason = 'acabou' | 'acabando' | 'pendente' | 'manual' | 'revisao' | 'par'
+
+export interface ListEntry extends Base {
+  itemId: Id
+  qty: number
+  addedBy: string
+  reason: EntryReason
+}
+
+export type TripKind = 'feira' | 'reposicao'
+
+export interface TripLine {
+  id: Id
+  itemId: Id
+  qty: number
+  unitPrice: number | null
+  status: 'pego' | 'faltou'
+  extra: boolean
+}
+
+export interface Trip extends Base {
+  shopId: Id
+  kind: TripKind
+  startedAt: number
+  finishedAt: number | null
+  lines: TripLine[]
+  /** Quanto foi pago no ticket (o resto foi dinheiro). */
+  paidTicket: number
+}
+
+export interface Settings {
+  me: string
+  people: string[]
+  /** Valor que cai no ticket por mês. 0 = não usa. */
+  ticketMonthly: number
+  /** Dia do mês em que o ticket cai (e a feira costuma acontecer). */
+  ticketDay: number
+  onboarded: boolean
+}
+
+export interface DB {
+  version: 1
+  items: Record<Id, Item>
+  shops: Record<Id, Shop>
+  list: Record<Id, ListEntry>
+  trips: Record<Id, Trip>
+  settings: Settings
+}

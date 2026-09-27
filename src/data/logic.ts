@@ -1,0 +1,288 @@
+import { DAY } from './format'
+import type { CategoryId, DB, Id, Item, Trip } from './types'
+
+/**
+ * Estoque estimado: a gente não depende de você lembrar de atualizar.
+ * O app aprende quanto a casa consome por dia (pelo histórico de compras)
+ * e vai "gastando" o estoque sozinho. Quando você informa algo
+ * (acabou / usei 1 / revisão), a estimativa é corrigida.
+ */
+
+export interface Purchase {
+  at: number
+  qty: number
+  unitPrice: number | null
+  shopId: Id
+  tripId: Id
+  kind: Trip['kind']
+  extra: boolean
+}
+
+export function finishedTrips(db: DB): Trip[] {
+  return Object.values(db.trips)
+    .filter((t) => !t.deleted && t.finishedAt != null)
+    .sort((a, b) => a.finishedAt! - b.finishedAt!)
+}
+
+export function purchasesOf(db: DB, itemId: Id): Purchase[] {
+  const out: Purchase[] = []
+  for (const t of finishedTrips(db)) {
+    for (const l of t.lines) {
+      if (l.itemId === itemId && l.status === 'pego')
+        out.push({ at: t.finishedAt!, qty: l.qty, unitPrice: l.unitPrice, shopId: t.shopId, tripId: t.id, kind: t.kind, extra: l.extra })
+    }
+  }
+  return out
+}
+
+/** Consumo por dia. Com pouco histórico, assume que a compra padrão dura um mês. */
+export function dailyRate(db: DB, item: Item): number {
+  const ps = purchasesOf(db, item.id).filter((p) => p.at > Date.now() - 365 * DAY)
+  if (ps.length >= 2) {
+    const span = (ps[ps.length - 1]!.at - ps[0]!.at) / DAY
+    if (span >= 20) {
+      const consumed = ps.slice(0, -1).reduce((s, p) => s + p.qty, 0)
+      return consumed / span
+    }
+  }
+  return Math.max(item.defaultQty, 0.1) / 30
+}
+
+export function estimateStock(db: DB, item: Item, now = Date.now()): number | null {
+  if (item.stockQty == null || item.stockAt == null) return null
+  const days = Math.max(0, (now - item.stockAt) / DAY)
+  return Math.max(0, item.stockQty - dailyRate(db, item) * days)
+}
+
+export type StockStatus = 'acabou' | 'acabando' | 'ok' | 'desconhecido'
+
+export interface StockInfo {
+  est: number | null
+  daysLeft: number | null
+  status: StockStatus
+  /** Estimativa de que não chega até a próxima feira. */
+  shortBeforeFeira: boolean
+  /** true quando alguém disse que acabou; false quando é só a estimativa. */
+  confirmedOut: boolean
+}
+
+export function stockInfo(db: DB, item: Item, now = Date.now()): StockInfo {
+  const est = estimateStock(db, item, now)
+  if (est == null) return { est: null, daysLeft: null, status: 'desconhecido', shortBeforeFeira: false, confirmedOut: false }
+  const rate = dailyRate(db, item)
+  const daysLeft = rate > 0 ? est / rate : Infinity
+  // "acabou" pela estimativa só quando sobrou menos de ~5% do padrão
+  const status: StockStatus = est <= item.defaultQty * 0.05 ? 'acabou' : daysLeft <= 7 ? 'acabando' : 'ok'
+  return { est, daysLeft, status, shortBeforeFeira: daysLeft < daysUntilFeira(db.settings.ticketDay, now), confirmedOut: item.stockQty === 0 }
+}
+
+/** Quanto comprar: o que a casa gasta até a feira seguinte, menos o que ainda tem. */
+export function suggestBuyQty(db: DB, item: Item): number {
+  const est = estimateStock(db, item) ?? 0
+  const need = item.defaultQty - est
+  if (need <= 0) return item.defaultQty
+  if (item.unit === 'kg' || item.unit === 'L') return Math.max(+need.toFixed(1), 0.5)
+  return Math.max(1, Math.ceil(need))
+}
+
+// ---------- Ciclo do ticket ----------
+
+export function cycleStart(ticketDay: number, now = Date.now()): number {
+  const d = new Date(now)
+  const day = clampDay(d.getFullYear(), d.getMonth(), ticketDay)
+  let start = new Date(d.getFullYear(), d.getMonth(), day)
+  if (start.getTime() > now) {
+    const pm = new Date(d.getFullYear(), d.getMonth() - 1, 1)
+    start = new Date(pm.getFullYear(), pm.getMonth(), clampDay(pm.getFullYear(), pm.getMonth(), ticketDay))
+  }
+  return start.getTime()
+}
+
+export function nextFeira(ticketDay: number, now = Date.now()): number {
+  const s = new Date(cycleStart(ticketDay, now))
+  const nm = new Date(s.getFullYear(), s.getMonth() + 1, 1)
+  return new Date(nm.getFullYear(), nm.getMonth(), clampDay(nm.getFullYear(), nm.getMonth(), ticketDay)).getTime()
+}
+
+export function daysUntilFeira(ticketDay: number, now = Date.now()): number {
+  return Math.ceil((nextFeira(ticketDay, now) - now) / DAY)
+}
+
+function clampDay(y: number, m: number, day: number) {
+  return Math.min(day, new Date(y, m + 1, 0).getDate())
+}
+
+export function tripTotal(trip: Trip): { total: number; picked: number; unpriced: number; missing: number; extras: number } {
+  let total = 0
+  let picked = 0
+  let unpriced = 0
+  let missing = 0
+  let extras = 0
+  for (const l of trip.lines) {
+    if (l.status === 'faltou') {
+      missing++
+      continue
+    }
+    picked++
+    if (l.unitPrice == null) unpriced++
+    const v = (l.unitPrice ?? 0) * l.qty
+    total += v
+    if (l.extra) extras += v
+  }
+  return { total, picked, unpriced, missing, extras }
+}
+
+export function ticketUsedInCycle(db: DB, now = Date.now()): number {
+  const start = cycleStart(db.settings.ticketDay, now)
+  return finishedTrips(db)
+    .filter((t) => t.finishedAt! >= start)
+    .reduce((s, t) => s + t.paidTicket, 0)
+}
+
+export function ticketLeft(db: DB, now = Date.now()): number {
+  return Math.max(0, db.settings.ticketMonthly - ticketUsedInCycle(db, now))
+}
+
+// ---------- Preços ----------
+
+export function lastPrice(db: DB, itemId: Id, shopId?: Id): number | null {
+  const ps = purchasesOf(db, itemId).filter((p) => p.unitPrice != null)
+  const same = shopId ? ps.filter((p) => p.shopId === shopId) : []
+  const pick = (same.length ? same : ps).at(-1)
+  return pick?.unitPrice ?? null
+}
+
+/** Estimativa da lista inteira com os últimos preços conhecidos. */
+export function listEstimate(db: DB): { total: number; known: number; unknown: number } {
+  let total = 0
+  let known = 0
+  let unknown = 0
+  for (const e of Object.values(db.list)) {
+    if (e.deleted) continue
+    const p = lastPrice(db, e.itemId, db.items[e.itemId]?.shopId)
+    if (p == null) unknown++
+    else {
+      known++
+      total += p * e.qty
+    }
+  }
+  return { total, known, unknown }
+}
+
+// ---------- Esquecidos e pares ----------
+
+export function listItemIds(db: DB): Set<Id> {
+  return new Set(Object.values(db.list).filter((e) => !e.deleted).map((e) => e.itemId))
+}
+
+/** Itens que vocês costumam comprar (ou que devem estar acabando) e não estão na lista. */
+export function forgotten(db: DB): Item[] {
+  const inList = listItemIds(db)
+  const feiras = finishedTrips(db)
+    .filter((t) => t.kind === 'feira')
+    .slice(-3)
+  const boughtCount = new Map<Id, number>()
+  for (const t of feiras) for (const l of t.lines) if (l.status === 'pego') boughtCount.set(l.itemId, (boughtCount.get(l.itemId) ?? 0) + 1)
+  const need = Math.min(2, feiras.length)
+  return Object.values(db.items)
+    .filter((i) => !i.deleted && !inList.has(i.id))
+    .filter((i) => {
+      const s = stockInfo(db, i)
+      if (s.status === 'acabou' || s.status === 'acabando') return true
+      if (s.status === 'ok' && !s.shortBeforeFeira) return false
+      return need > 0 && (boughtCount.get(i.id) ?? 0) >= need
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export function pairSuggestions(db: DB, itemId: Id): Item[] {
+  const it = db.items[itemId]
+  if (!it) return []
+  const inList = listItemIds(db)
+  const ids = new Set(it.pairs)
+  // pares são mútuos: se molho aponta pra macarrão, macarrão sugere molho
+  for (const o of Object.values(db.items)) if (o.pairs.includes(itemId)) ids.add(o.id)
+  return [...ids]
+    .map((id) => db.items[id])
+    .filter((p): p is Item => !!p && !p.deleted && !inList.has(p.id) && stockInfo(db, p).status !== 'ok')
+}
+
+// ---------- Estatísticas ----------
+
+export const monthKey = (ts: number) => {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+export interface MonthStat {
+  key: string
+  total: number
+  ticket: number
+  cash: number
+  extras: number
+  trips: number
+  byCategory: Partial<Record<CategoryId, number>>
+}
+
+export function monthlyStats(db: DB): MonthStat[] {
+  const map = new Map<string, MonthStat>()
+  for (const t of finishedTrips(db)) {
+    const key = monthKey(t.finishedAt!)
+    const m = map.get(key) ?? { key, total: 0, ticket: 0, cash: 0, extras: 0, trips: 0, byCategory: {} }
+    const tt = tripTotal(t)
+    m.total += tt.total
+    m.extras += tt.extras
+    m.ticket += Math.min(t.paidTicket, tt.total)
+    m.cash += Math.max(0, tt.total - t.paidTicket)
+    m.trips++
+    for (const l of t.lines) {
+      if (l.status !== 'pego' || l.unitPrice == null) continue
+      const cat = db.items[l.itemId]?.category ?? 'outros'
+      m.byCategory[cat] = (m.byCategory[cat] ?? 0) + l.unitPrice * l.qty
+    }
+    map.set(key, m)
+  }
+  return [...map.values()].sort((a, b) => a.key.localeCompare(b.key))
+}
+
+export interface ItemStat {
+  item: Item
+  times: number
+  /** De quantos em quantos dias vocês repõem. */
+  everyDays: number | null
+  qtyPerMonth: number
+  spendPerMonth: number
+  avgPrice: number | null
+  lastPrice: number | null
+  /** Variação do último preço contra a média anterior (0.1 = +10%). */
+  priceChange: number | null
+}
+
+export function itemStats(db: DB, item: Item): ItemStat {
+  const ps = purchasesOf(db, item.id)
+  const priced = ps.filter((p) => p.unitPrice != null)
+  const first = ps[0]?.at
+  const months = first ? Math.max(1, (Date.now() - first) / (30 * DAY)) : 1
+  const qty = ps.reduce((s, p) => s + p.qty, 0)
+  const spend = priced.reduce((s, p) => s + p.unitPrice! * p.qty, 0)
+  let everyDays: number | null = null
+  if (ps.length >= 2) everyDays = (ps[ps.length - 1]!.at - ps[0]!.at) / DAY / (ps.length - 1)
+  const avgPrice = priced.length ? priced.reduce((s, p) => s + p.unitPrice!, 0) / priced.length : null
+  const last = priced.at(-1)?.unitPrice ?? null
+  let priceChange: number | null = null
+  if (priced.length >= 2 && last != null) {
+    const prev = priced.slice(0, -1)
+    const prevAvg = prev.reduce((s, p) => s + p.unitPrice!, 0) / prev.length
+    if (prevAvg > 0) priceChange = last / prevAvg - 1
+  }
+  return {
+    item,
+    times: ps.length,
+    everyDays,
+    qtyPerMonth: ps.length ? qty / months : 0,
+    spendPerMonth: ps.length ? spend / months : 0,
+    avgPrice,
+    lastPrice: last,
+    priceChange,
+  }
+}

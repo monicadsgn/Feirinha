@@ -70,6 +70,11 @@ export function useDB(): DB {
   return useSyncExternalStore(subscribe, () => db)
 }
 
+/** Usado pelo servidor (atalhos da Siri): carrega a casa inteira vinda do banco. */
+export function setDB(next: DB) {
+  db = next
+}
+
 export function getDB(): DB {
   return db
 }

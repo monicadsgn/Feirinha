@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { BUILD } from '../pwa'
+import { useDB } from '../data/store'
+import { useSync } from '../data/sync'
 import { toast } from './ui'
 
 /**
@@ -33,6 +35,9 @@ function Copy({ text }: { text: string }) {
 export function Atalhos() {
   const [os, setOs] = useState<'iphone' | 'android'>(/android/i.test(navigator.userAgent) ? 'android' : 'iphone')
   const base = location.origin + location.pathname
+  const db = useDB()
+  const sync = useSync()
+  const casaLink = sync.casa ? `${location.origin}/api/casa?c=${sync.casa}&quem=${encodeURIComponent(db.settings.me || 'Casa')}` : null
   return (
     <div className="card stack">
       <h3>Atalhos e voz</h3>
@@ -55,40 +60,66 @@ export function Atalhos() {
           <div>
             <b>0. Instale o app:</b> no Safari, abra {base}, toque em Compartilhar → “Adicionar à Tela de Início”.
           </div>
-          <div className="stack" style={{ gap: 6 }}>
-            <b>1. “E aí Siri, Feirinha anota” (voz)</b>
-            <span>
-              No app <b>Atalhos</b>, toque em + e dê o nome “Feirinha anota”. Adicione 3 ações: <b>Ditar Texto</b> (idioma Português),{' '}
-              <b>Codificar URL</b> (usando o Texto Ditado) e <b>Abrir URLs</b> com o endereço abaixo seguido da variável “Texto Codificado”:
-            </span>
-            <Copy text={`${base}?voz=`} />
-            <span className="muted">Depois é só dizer: “E aí Siri, Feirinha anota” → “acabou o arroz e o feijão”.</span>
+          {!casaLink ? (
+            <div className="badge yellow" style={{ padding: 10, borderRadius: 12 }}>
+              Pra Siri e o Compartilhar funcionarem, crie a casa primeiro em “Compartilhar a casa” (acima). Os links dos atalhos aparecem aqui.
+            </div>
+          ) : (
+            <>
+              <div className="muted">
+                No iPhone, os atalhos falam direto com a casa, sem abrir o app: a Siri responde e tudo aparece nos dois celulares. Os links abaixo
+                têm o código da casa: não mande pra ninguém de fora.
+              </div>
+              <div className="stack" style={{ gap: 6 }}>
+                <b>1. “E aí Siri, Feirinha anota” (voz)</b>
+                <span>
+                  No app <b>Atalhos</b>, toque em + e dê o nome “Feirinha anota”. Adicione 4 ações, nesta ordem:
+                </span>
+                <ol style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }}>
+                  <li>
+                    <b>Ditar Texto</b> (idioma Português)
+                  </li>
+                  <li>
+                    <b>Codificar URL</b> → o Texto Ditado
+                  </li>
+                  <li>
+                    <b>Obter Conteúdo do URL</b> → cole o link abaixo e, no fim dele, coloque a variável “Texto Codificado”
+                  </li>
+                  <li>
+                    <b>Falar Texto</b> → Conteúdo do URL
+                  </li>
+                </ol>
+                <Copy text={`${casaLink}&voz=`} />
+                <span className="muted">Uso: “E aí Siri, Feirinha anota” → “acabou o arroz e o feijão” ou “coloca dois pacotes de café”.</span>
+              </div>
+              <div className="stack" style={{ gap: 6 }}>
+                <b>2. “Salvar no Feirinha” no Compartilhar (receitas)</b>
+                <span>
+                  Novo atalho “Salvar no Feirinha”. Nos detalhes (ⓘ), ative <b>Mostrar na Folha de Compartilhamento</b> (aceitar URLs e Texto).
+                  Ações:
+                </span>
+                <ol style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }}>
+                  <li>
+                    <b>Codificar URL</b> → Entrada do Atalho
+                  </li>
+                  <li>
+                    <b>Obter Conteúdo do URL</b> → cole o link abaixo + “Texto Codificado” no fim
+                  </li>
+                  <li>
+                    <b>Mostrar Notificação</b> → Conteúdo do URL
+                  </li>
+                </ol>
+                <Copy text={`${casaLink}&receita=`} />
+                <span className="muted">No post do Instagram/TikTok: Compartilhar → Salvar no Feirinha. A receita aparece em Receitas → Salvas, com os ingredientes da despensa.</span>
+              </div>
+            </>
+          )}
+          <div>
+            <b>3. Ditado:</b> se o 🎤 não aparecer dentro do app, use o microfone do próprio teclado no “Adicionar” e toque em Enter: a frase vira
+            comando do mesmo jeito.
           </div>
-          <div className="stack" style={{ gap: 6 }}>
-            <b>2. Salvar receita do Instagram/TikTok (Compartilhar)</b>
-            <span>
-              Novo atalho “Salvar no Feirinha”. Nos detalhes (ⓘ), ative <b>Mostrar na Folha de Compartilhamento</b> e aceite URLs. Adicione{' '}
-              <b>Codificar URL</b> (usando a Entrada do Atalho) e <b>Abrir URLs</b> com o endereço abaixo seguido de “Texto Codificado”:
-            </span>
-            <Copy text={`${base}?url=`} />
-            <span className="muted">No post: Compartilhar → Salvar no Feirinha. O app busca a legenda e acha os ingredientes da despensa.</span>
-          </div>
-          <div className="stack" style={{ gap: 6 }}>
-            <b>3. Botões rápidos (Tela de Início ou Widget de Atalhos)</b>
-            <span>Um atalho com só a ação Abrir URLs pra cada um:</span>
-            <span>Acabou algo:</span>
-            <Copy text={`${base}?acao=acabou`} />
-            <span>Modo Mercado:</span>
-            <Copy text={`${base}?acao=mercado`} />
-            <span>Conferir nota fiscal:</span>
-            <Copy text={`${base}?acao=nota`} />
-          </div>
-          <div className="stack" style={{ gap: 6 }}>
-            <b>4. Automação: chegou em casa depois da feira</b>
-            <span>
-              Atalhos → Automação → Chegar (em casa), só nos dias de feira se quiser → Abrir URLs com o link de “Conferir nota fiscal” acima. Aparece
-              uma notificação e, tocando, já abre a leitura do QR.
-            </span>
+          <div>
+            <b>4. Lembrete ao chegar em casa:</b> Atalhos → Automação → Chegar (casa) → <b>Mostrar Notificação</b> “Conferir a nota no Feirinha”.
           </div>
         </div>
       ) : (

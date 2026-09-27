@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run build:api && tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "build:api": "rolldown server/casa.ts --format esm --platform node --file api/casa.js --banner '// Gerado por `npm run build:api` a partir de server/casa.ts. Não edite à mão.'"
   },
   "dependencies": {
     "@fontsource-variable/montserrat": "^5.3.0",

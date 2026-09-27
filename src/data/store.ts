@@ -1,11 +1,11 @@
 import { useSyncExternalStore } from 'react'
-import { DEFAULT_AISLES, SEED_ITEMS, SEED_SHOPS, guessCategory } from './catalog'
+import { CATALOG_V3_NEW, CATALOG_V3_REMOVED, CATALOG_V3_RENAMES, DEFAULT_AISLES, SEED_ITEMS, SEED_SHOPS, guessCategory, type SeedItem } from './catalog'
 import { estimateStock, suggestBuyQty } from './logic'
 import { normalize } from './format'
 import type { DB, EntryReason, Id, Item, ListEntry, Settings, Shop, Trip, TripKind, TripLine } from './types'
 
 const KEY = 'feirinha:v1'
-export const CATALOG_VERSION = 2
+export const CATALOG_VERSION = 3
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
 
@@ -480,23 +480,78 @@ export function finishOnboarding(settings: Partial<Settings>, seedKeys: string[]
     const keySet = new Set(seedKeys)
     for (const s of SEED_ITEMS) {
       if (!keySet.has(s.key) || d.items[s.key]) continue
-      d.items[s.key] = {
-        id: s.key,
-        name: s.name,
-        category: s.category,
-        place: s.place,
-        unit: s.unit,
-        defaultQty: s.qty,
-        everyMonths: s.every,
-        note: s.note && s.origin === 'lista' ? s.note : undefined,
-        shopId: s.shop,
-        pairs: (s.pairs ?? []).filter((p) => keySet.has(p)),
-        stockQty: null,
-        stockAt: null,
-        updatedAt: now,
-      }
+      d.items[s.key] = seedToItem(s, keySet, now)
     }
     Object.assign(d.settings, settings, { onboarded: true, catalogVersion: CATALOG_VERSION })
+  })
+}
+
+function seedToItem(s: SeedItem, keys: Set<string>, now: number): Item {
+  return {
+    id: s.key,
+    name: s.name,
+    category: s.category,
+    place: s.place,
+    unit: s.unit,
+    defaultQty: s.qty,
+    everyMonths: s.every,
+    note: s.note && s.origin === 'lista' ? s.note : undefined,
+    shopId: s.shop,
+    pairs: (s.pairs ?? []).filter((p) => keys.has(p)),
+    stockQty: null,
+    stockAt: null,
+    updatedAt: now,
+  }
+}
+
+/** Atualiza o catálogo de quem cadastrou numa versão anterior. Roda uma vez por celular. */
+export function runMigrations() {
+  const s = db.settings
+  if (!s.onboarded || (s.catalogVersion ?? 1) !== 2) return
+  commit((d) => {
+    const now = Date.now()
+    const seed = new Map(SEED_ITEMS.map((x) => [x.key, x]))
+    const has = new Set(Object.keys(d.items).filter((k) => !d.items[k]!.deleted))
+    for (const [id, oldName] of Object.entries(CATALOG_V3_RENAMES)) {
+      const it = d.items[id]
+      const sd = seed.get(id)
+      if (!sd) continue
+      if (!it || it.deleted) {
+        // itens que a casa compra e que antes vinham desmarcados
+        if (id === 'esponja' || id === 'milho-lata') d.items[id] = seedToItem(sd, new Set([...has, ...CATALOG_V3_NEW]), now)
+        continue
+      }
+      if (it.name !== oldName) continue
+      const qtyChanged = it.unit !== sd.unit
+      Object.assign(it, {
+        name: sd.name,
+        unit: sd.unit,
+        defaultQty: qtyChanged || it.defaultQty === 1 ? sd.qty : it.defaultQty,
+        note: sd.note,
+        everyMonths: sd.every,
+        shopId: it.shopId === 'hortifruti' ? 'atacadao' : it.shopId,
+        pairs: [...new Set([...it.pairs, ...(sd.pairs ?? []).filter((p) => has.has(p) || CATALOG_V3_NEW.includes(p))])],
+        updatedAt: now,
+      })
+    }
+    for (const id of CATALOG_V3_NEW) {
+      const sd = seed.get(id)
+      if (sd && !has.has(id)) d.items[id] = seedToItem(sd, new Set([...has, ...CATALOG_V3_NEW]), now)
+    }
+    for (const [id, oldName] of Object.entries(CATALOG_V3_REMOVED)) {
+      const it = d.items[id]
+      if (it && it.name === oldName) {
+        Object.assign(it, { deleted: true, updatedAt: now })
+        for (const e of Object.values(d.list)) if (e.itemId === id) Object.assign(e, { deleted: true, updatedAt: now })
+      }
+    }
+    // verdura: tenta primeiro no Atacadão; se estiver feia, a quitanda
+    for (const it of Object.values(d.items)) {
+      if (it.category === 'hortifruti' && it.shopId === 'hortifruti' && seed.has(it.id)) Object.assign(it, { shopId: 'atacadao', updatedAt: now })
+    }
+    const q = d.shops.hortifruti
+    if (q && q.name === 'Sacolão / feira') Object.assign(q, { name: 'Quitanda / sacolão', updatedAt: now })
+    d.settings.catalogVersion = 3
   })
 }
 

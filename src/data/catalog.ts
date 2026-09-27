@@ -79,7 +79,7 @@ export const EVERY_OPTIONS = [
 /** Lojas iniciais. A chave vira o id. */
 export const SEED_SHOPS = [
   { key: 'atacadao', name: 'Atacadão', emoji: '🛒' },
-  { key: 'hortifruti', name: 'Sacolão / feira', emoji: '🥕' },
+  { key: 'hortifruti', name: 'Quitanda / sacolão', emoji: '🥕' },
   { key: 'mercadinho', name: 'Mercadinho do bairro', emoji: '🏪' },
 ] as const
 
@@ -117,7 +117,7 @@ const s = (key: string, name: string, category: CategoryId, place: PlaceId, unit
   place,
   unit,
   qty,
-  shop: o.shop ?? (category === 'hortifruti' ? 'hortifruti' : 'atacadao'),
+  shop: o.shop ?? 'atacadao',
   origin: o.origin ?? 'lista',
   every: o.every,
   note: o.note,
@@ -140,25 +140,26 @@ export const SEED_ITEMS: SeedItem[] = [
   s('macarrao-espaguete', 'Macarrão espaguete', 'mercearia', 'armario', 'pct', 2, { pairs: ['extrato-tomate', 'queijo-ralado'] }),
   s('cuscuz', 'Flocão de milho (cuscuz)', 'mercearia', 'armario', 'pct', 2),
   s('farinha-mandioca', 'Farinha de mandioca', 'mercearia', 'armario', 'pct', 1, { every: 2 }),
-  s('acucar', 'Açúcar (pacote grande)', 'mercearia', 'armario', 'pct', 1, { every: 3, note: 'compra grande que dura' }),
+  s('acucar', 'Açúcar (1 kg)', 'mercearia', 'armario', 'pct', 1, { every: 2 }),
   s('sal', 'Sal (1 kg)', 'mercearia', 'armario', 'pct', 1, { every: 6 }),
   s('fermento', 'Fermento em pó', 'mercearia', 'armario', 'un', 1, { every: 3 }),
   s('farinha-trigo', 'Farinha de trigo', 'mercearia', 'armario', 'pct', 1, falta({ every: 2, note: 'pra empanar e bolos' })),
-  s('milho-lata', 'Milho em lata', 'congelados', 'armario', 'lata', 2, falta({ note: 'escondidinho, salada, recheio' })),
+  s('milho-lata', 'Milho em lata', 'congelados', 'armario', 'lata', 1, { pairs: ['ervilha-lata'] }),
+  s('ervilha-lata', 'Ervilha em lata', 'congelados', 'armario', 'lata', 1, { pairs: ['milho-lata'] }),
 
   // Carnes, aves e peixes
   s('file-peito', 'Filé de peito de frango', 'acougue', 'freezer', 'kg', 3, { note: 'grelhar, empanar ou desfiar' }),
   s('coxinha-asa', 'Coxinha da asa', 'acougue', 'freezer', 'kg', 1, { note: 'airfryer' }),
   s('coxa-sobrecoxa', 'Coxa e sobrecoxa', 'acougue', 'freezer', 'kg', 1),
-  s('carne-moida', 'Carne moída (patinho)', 'acougue', 'freezer', 'kg', 1.5, { note: 'porcione em saquinhos de 250 g' }),
+  s('carne-moida', 'Carne moída (coxão mole)', 'acougue', 'freezer', 'kg', 1.5, { note: 'nem a nobre nem a de segunda' }),
   s('patinho', 'Patinho (bife ou assado)', 'acougue', 'freezer', 'kg', 1),
   s('cupim', 'Cupim', 'acougue', 'freezer', 'kg', 1, { note: 'mais gordura, fica macio na pressão' }),
   s('acem', 'Acém (pressão/guisado)', 'acougue', 'freezer', 'kg', 1.5),
   s('coxao-mole', 'Coxão mole (bife)', 'acougue', 'freezer', 'kg', 1),
   s('lombo', 'Lombo suíno', 'acougue', 'freezer', 'kg', 1),
   s('linguica', 'Linguiça de porco', 'acougue', 'freezer', 'kg', 1),
-  s('bacon', 'Bacon', 'acougue', 'geladeira', 'pct', 1),
-  s('salsicha', 'Salsicha', 'acougue', 'geladeira', 'pct', 1, { pairs: ['pao-hotdog'] }),
+  s('bacon', 'Bacon', 'acougue', 'geladeira', 'kg', 0.3, { note: 'por peso' }),
+  s('salsicha', 'Salsicha', 'acougue', 'geladeira', 'kg', 1, { note: 'por peso', pairs: ['pao-hotdog'] }),
   s('tilapia', 'Filé de tilápia', 'acougue', 'freezer', 'kg', 1, { origin: 'variar', note: 'vocês enjoaram: deixei desmarcado' }),
   s('merluza', 'Filé de merluza', 'acougue', 'freezer', 'kg', 1, variar('peixe mais barato que tilápia')),
   s('musculo', 'Músculo', 'acougue', 'freezer', 'kg', 1, variar('barato; na pressão desfia e rende 3 refeições')),
@@ -173,22 +174,22 @@ export const SEED_ITEMS: SeedItem[] = [
   s('leite', 'Leite (caixa de 1 L)', 'frios', 'armario', 'cx', 4),
   s('creme-leite', 'Creme de leite', 'frios', 'armario', 'cx', 4),
   s('queijo-ralado', 'Queijo ralado', 'frios', 'geladeira', 'pct', 1),
-  s('margarina', 'Margarina (pote grande, da boa)', 'frios', 'geladeira', 'un', 1, { note: 'uma só pra comer e pra assar' }),
+  s('margarina', 'Margarina (pote de 1 kg)', 'frios', 'geladeira', 'un', 1, { note: 'uma só, da boa; às vezes o de 500 g' }),
   s('queijo-prato', 'Queijo prato / mussarela', 'frios', 'geladeira', 'kg', 0.3, { pairs: ['presunto'] }),
   s('presunto', 'Presunto', 'frios', 'geladeira', 'kg', 0.2, { pairs: ['queijo-prato'] }),
   s('requeijao', 'Requeijão', 'frios', 'geladeira', 'un', 1, variar('com frango desfiado vira recheio de pão de forma')),
   s('iogurte', 'Iogurte (garrafa de 1 L)', 'frios', 'geladeira', 'un', 1, variar('a garrafa sai bem mais barata que os potinhos')),
-  s('queijo-coalho', 'Queijo coalho', 'frios', 'geladeira', 'pct', 1, variar('café da manhã com cuscuz ou tapioca')),
+  s('queijo-coalho', 'Queijo coalho', 'frios', 'geladeira', 'kg', 0.3, { note: 'por peso' }),
 
   // Verduras, legumes e frutas
-  s('tomate', 'Tomate', 'hortifruti', 'fruteira', 'un', 6),
-  s('cebola', 'Cebola', 'hortifruti', 'fruteira', 'un', 3),
+  s('tomate', 'Tomate', 'hortifruti', 'fruteira', 'un', 6, { note: 'se estiver feio, pega na quitanda' }),
+  s('cebola', 'Cebola', 'hortifruti', 'fruteira', 'un', 3, { note: 'se estiver feia, pega na quitanda' }),
   s('batata', 'Batata', 'hortifruti', 'fruteira', 'kg', 2),
   s('cenoura', 'Cenoura', 'hortifruti', 'geladeira', 'un', 3),
   s('alface', 'Alface', 'hortifruti', 'geladeira', 'pé', 1),
   s('coentro', 'Coentro', 'hortifruti', 'geladeira', 'maço', 1),
   s('cebolinha', 'Cebolinha', 'hortifruti', 'geladeira', 'maço', 1),
-  s('alho', 'Alho', 'hortifruti', 'armario', 'un', 1, { note: 'trança ou cabeças' }),
+  s('alho', 'Alho (cabeças)', 'hortifruti', 'armario', 'un', 4, { note: 'vende por quilo: pega no olho e vê o preço no caixa' }),
   s('banana', 'Banana', 'hortifruti', 'fruteira', 'cacho', 1),
   s('laranja', 'Laranja', 'hortifruti', 'fruteira', 'kg', 2),
   s('uva', 'Uva', 'hortifruti', 'geladeira', 'kg', 1),
@@ -205,39 +206,43 @@ export const SEED_ITEMS: SeedItem[] = [
 
   // Óleos e temperos
   s('azeite', 'Azeite', 'temperos', 'armario', 'un', 1),
-  s('temperos', 'Temperos da cozinha', 'temperos', 'armario', 'un', 1, { note: 'colorau, cominho, pimenta…' }),
+  s('sazon', 'Sazón (caixa de sachês)', 'temperos', 'armario', 'cx', 1),
+  s('paprica', 'Páprica', 'temperos', 'armario', 'pct', 1, { every: 3 }),
+  s('oregano', 'Orégano', 'temperos', 'armario', 'pct', 1, { every: 3 }),
+  s('chimichurri', 'Chimichurri', 'temperos', 'armario', 'pct', 1, { every: 3 }),
+  s('lemon-pepper', 'Lemon pepper', 'temperos', 'armario', 'pct', 1, { every: 3 }),
   s('extrato-tomate', 'Extrato de tomate', 'temperos', 'armario', 'un', 1),
-  s('maionese', 'Maionese', 'temperos', 'geladeira', 'un', 1),
-  s('ketchup', 'Ketchup', 'temperos', 'geladeira', 'un', 1, { every: 2 }),
+  s('maionese', 'Maionese (refil 200 g)', 'temperos', 'geladeira', 'un', 1),
+  s('ketchup', 'Ketchup', 'temperos', 'geladeira', 'un', 1, { every: 2, note: 'escolher um tamanho padrão' }),
   s('oleo', 'Óleo', 'temperos', 'armario', 'un', 1, falta({ note: 'não estava nas listas: vocês fritam bastante' })),
   s('molho-tomate', 'Molho de tomate pronto', 'temperos', 'armario', 'un', 2, falta()),
   s('shoyu', 'Shoyu', 'temperos', 'armario', 'un', 1, variar('marinar frango e fazer carne acebolada', { every: 3 })),
 
   // Congelados e enlatados
   s('batata-frita', 'Batata frita congelada', 'congelados', 'freezer', 'pct', 1),
-  s('batata-palha', 'Batata palha', 'congelados', 'armario', 'pct', 1),
+  s('batata-palha', 'Batata palha', 'congelados', 'armario', 'pct', 1, { note: 'pequena ou grande, a que compensar' }),
   s('sardinha', 'Sardinha em lata', 'congelados', 'armario', 'lata', 2),
 
   // Café da manhã
-  s('nescau', 'Nescau', 'matinais', 'armario', 'un', 1),
+  s('nescau', 'Nescau (pacote grande)', 'matinais', 'armario', 'pct', 1, { note: 'lata sai mais cara' }),
   s('cafe', 'Café', 'matinais', 'armario', 'pct', 1, falta()),
 
   // Bebidas e lanches
-  s('polpa', 'Polpa de fruta (Canaã)', 'bebidas', 'freezer', 'pct', 5),
+  s('polpa', 'Polpa de fruta (Canaã)', 'bebidas', 'freezer', 'pct', 2, { note: 'pacote com vários saquinhos' }),
   s('salgadinho', 'Salgadinho', 'besteiras', 'armario', 'pct', 3),
   s('chocolate', 'Bis ou bombom', 'besteiras', 'armario', 'un', 1),
   s('pipoca', 'Pipoca de micro-ondas', 'besteiras', 'armario', 'un', 4),
 
   // Limpeza
   s('detergente', 'Detergente', 'limpeza', 'limpeza', 'un', 4, { pairs: ['esponja'] }),
-  s('amaciante', 'Amaciante', 'limpeza', 'limpeza', 'un', 1, { pairs: ['sabao-liquido'] }),
-  s('sabao-liquido', 'Sabão líquido', 'limpeza', 'limpeza', 'un', 1, { note: 'olhar preço na Amazon também', pairs: ['amaciante'] }),
-  s('agua-sanitaria', 'Água sanitária', 'limpeza', 'limpeza', 'L', 1),
+  s('amaciante', 'Amaciante (refil)', 'limpeza', 'limpeza', 'un', 1, { pairs: ['sabao-liquido'] }),
+  s('sabao-liquido', 'Sabão líquido (refil)', 'limpeza', 'limpeza', 'un', 1, { note: 'olhar preço na Amazon também', pairs: ['amaciante'] }),
+  s('agua-sanitaria', 'Água sanitária', 'limpeza', 'limpeza', 'L', 2, { note: 'garrafas de 1 L ou uma de 2 L, a que compensar' }),
   s('cif', 'Cif (limpador cremoso)', 'limpeza', 'limpeza', 'un', 1, { every: 2 }),
   s('bombril', 'Bombril', 'limpeza', 'limpeza', 'pct', 1, { every: 2 }),
   s('saco-lixo', 'Saco de lixo', 'limpeza', 'limpeza', 'rolo', 1),
   s('baygon', 'Baygon', 'limpeza', 'limpeza', 'un', 1, { every: 3 }),
-  s('esponja', 'Esponja', 'limpeza', 'limpeza', 'pct', 1, falta({ pairs: ['detergente'] })),
+  s('esponja', 'Esponja (pacote com 4)', 'limpeza', 'limpeza', 'pct', 1, { pairs: ['detergente'] }),
   s('desinfetante', 'Desinfetante', 'limpeza', 'limpeza', 'un', 1, falta()),
   s('papel-aluminio', 'Papel alumínio', 'casa', 'armario', 'rolo', 2, { every: 2 }),
   s('papel-filme', 'Papel filme', 'casa', 'armario', 'rolo', 1, { every: 3 }),
@@ -245,7 +250,7 @@ export const SEED_ITEMS: SeedItem[] = [
   s('saquinho-freezer', 'Saquinhos pra congelar', 'casa', 'armario', 'pct', 1, variar('pra porcionar a carne e fazer durar o mês', { every: 2 })),
 
   // Higiene
-  s('papel-higienico', 'Papel higiênico', 'higiene', 'banheiro', 'pct', 1),
+  s('papel-higienico', 'Papel higiênico (12 rolos)', 'higiene', 'banheiro', 'pct', 1),
   s('cotonete', 'Cotonete', 'higiene', 'banheiro', 'cx', 1),
   s('pasta-dente', 'Pasta de dente', 'higiene', 'banheiro', 'un', 1),
   s('escova-dente', 'Escova de dentes', 'higiene', 'banheiro', 'un', 1, { every: 3 }),
@@ -280,3 +285,35 @@ export function guessCategory(name: string): { category: CategoryId; place: Plac
   for (const [re, category, place] of HINTS) if (re.test(name)) return { category, place }
   return { category: 'outros', place: 'armario' }
 }
+
+/**
+ * Ajustes da versão 3 do catálogo (feedback da revisão de 27/09) para quem já
+ * cadastrou com a versão 2. Só mexe no item se ele ainda tem o nome antigo,
+ * pra não desfazer algo que a pessoa editou.
+ */
+export const CATALOG_V3_RENAMES: Record<string, string> = {
+  acucar: 'Açúcar (pacote grande)',
+  'carne-moida': 'Carne moída (patinho)',
+  bacon: 'Bacon',
+  salsicha: 'Salsicha',
+  margarina: 'Margarina (pote grande, da boa)',
+  'queijo-coalho': 'Queijo coalho',
+  alho: 'Alho',
+  tomate: 'Tomate',
+  cebola: 'Cebola',
+  maionese: 'Maionese',
+  ketchup: 'Ketchup',
+  'batata-palha': 'Batata palha',
+  nescau: 'Nescau',
+  polpa: 'Polpa de fruta (Canaã)',
+  amaciante: 'Amaciante',
+  'sabao-liquido': 'Sabão líquido',
+  'agua-sanitaria': 'Água sanitária',
+  esponja: 'Esponja',
+  'papel-higienico': 'Papel higiênico',
+  'milho-lata': 'Milho em lata',
+}
+/** Itens novos na v3 que entram pra quem já tinha cadastro. */
+export const CATALOG_V3_NEW = ['ervilha-lata', 'sazon', 'paprica', 'oregano', 'chimichurri', 'lemon-pepper']
+/** Itens que saíram na v3 (tempero genérico virou itens separados). */
+export const CATALOG_V3_REMOVED: Record<string, string> = { temperos: 'Temperos da cozinha' }

@@ -76,7 +76,7 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
         <i style={{ width: `${((step + 1) / places.length) * 100}%` }} />
       </div>
       <p className="muted small" style={{ margin: '0 0 10px' }}>
-        Não precisa contar. Pra cada item: <b>dá até a próxima feira?</b> Se for pouco ou acabou, ajuste quanto comprar (pode deixar 0).
+        Não precisa contar. Pra cada item: <b>dá até a próxima feira?</b> Se for pouco ou não tem (acabou ou nunca teve), ajuste quanto comprar (pode deixar 0).
         O que o app acha que acabou já vem marcado.
       </p>
 
@@ -104,7 +104,7 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
                   [
                     ['ok', 'Dá'],
                     ['pouco', 'Pouco'],
-                    ['acabou', 'Acabou'],
+                    ['acabou', 'Não tem'],
                   ] as [ReviewAnswer, string][]
                 ).map(([k, label]) => (
                   <button

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Compare } from '../components/Compare'
 import { PriceSheet } from '../components/PriceSheet'
 import { QuickAdd } from '../components/QuickAdd'
 import { SwipeRow } from '../components/SwipeRow'
@@ -22,6 +23,7 @@ function Start({ db }: { db: DB }) {
   const entries = Object.values(db.list).filter((e) => !e.deleted && db.items[e.itemId] && !db.items[e.itemId]!.deleted)
   const [shopId, setShopId] = useState(shops[0]?.id ?? '')
   const [kind, setKind] = useState<TripKind>('feira')
+  const [compare, setCompare] = useState(false)
   const miss = kind === 'feira' ? forgotten(db) : []
   const left = ticketLeft(db)
 
@@ -32,7 +34,11 @@ function Start({ db }: { db: DB }) {
           <div className="muted small">Lista + calculadora juntas</div>
           <h1>Modo Mercado</h1>
         </div>
+        <button className="btn sm" onClick={() => setCompare(true)}>
+          ⚖️ Comparar
+        </button>
       </div>
+      {compare && <Compare onClose={() => setCompare(false)} />}
 
       <div className="card stack">
         <div className="field">
@@ -112,6 +118,7 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
   const [finishing, setFinishing] = useState(false)
   const [aisles, setAisles] = useState(false)
   const [showOthers, setShowOthers] = useState(false)
+  const [compare, setCompare] = useState<string | null>(null)
 
   const lines = new Map(trip.lines.map((l) => [l.itemId, l]))
   const inList = listItemIds(db)
@@ -238,6 +245,9 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
         <button className="btn grow" onClick={() => setExtra(true)}>
           ＋ Extra
         </button>
+        <button className="btn grow" onClick={() => setCompare('')}>
+          ⚖️ Compensa?
+        </button>
         <button className="btn grow" onClick={() => setAisles(true)}>
           ↕ Corredores
         </button>
@@ -268,6 +278,7 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
             setLine(trip.id, editItem.id, { status: 'faltou' })
             setEditing(null)
           }}
+          onCompare={() => setCompare(editItem.name)}
           onRemove={
             editLine
               ? () => {
@@ -289,6 +300,8 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
           }}
         />
       )}
+
+      {compare != null && <Compare title={compare || undefined} onClose={() => setCompare(null)} />}
 
       {aisles && shop && <AisleSheet db={db} shopId={shop.id} onClose={() => setAisles(false)} />}
 

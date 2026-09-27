@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import { App } from './App'
 import { startSync } from './data/sync'
+import { runMigrations } from './data/store'
 import '@fontsource-variable/montserrat'
 import './styles.css'
 
@@ -23,6 +24,7 @@ if (window.self === window.top) {
 }
 
 startSync()
+runMigrations()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

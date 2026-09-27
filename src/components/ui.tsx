@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { qtyLabel } from '../data/format'
 import type { Unit } from '../data/types'
 
@@ -170,7 +170,13 @@ export function useDraft<T>(key: string, init: T | (() => T)): [T, (v: T | ((pre
     }
     return typeof init === 'function' ? (init as () => T)() : init
   })
+  // só grava depois da primeira mudança: abrir e fechar sem mexer não vira rascunho
+  const first = useRef(true)
   useEffect(() => {
+    if (first.current) {
+      first.current = false
+      return
+    }
     try {
       localStorage.setItem(DRAFT + key, JSON.stringify(value))
     } catch {

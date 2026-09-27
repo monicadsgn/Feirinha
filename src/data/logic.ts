@@ -348,3 +348,25 @@ export function recipeStatus(db: DB, uses: Id[], protein?: Id[]): { missing: Id[
   const missing = rest.filter((u) => db.items[u] && !db.items[u]!.deleted && !haveItem(db, u))
   return { missing, proteinOk, unknown }
 }
+
+// ---------- Caminho do mês: Casa → Lista → Mercado → Nota ----------
+
+export type JourneyStep = 1 | 2 | 3 | 4
+
+export interface Journey {
+  step: JourneyStep
+  done: [boolean, boolean, boolean, boolean]
+  /** Compra em andamento (passo 3) ou recém-feita pra conferir (passo 4). */
+  tripId?: Id
+}
+
+export function journey(db: DB, now = Date.now()): Journey {
+  const trips = Object.values(db.trips).filter((t) => !t.deleted)
+  const active = trips.find((t) => t.finishedAt == null)
+  const last = trips.filter((t) => t.finishedAt != null && t.kind === 'feira').sort((a, b) => b.finishedAt! - a.finishedAt!)[0]
+  const reviewed = (db.settings.lastReviewAt ?? 0) > (last?.finishedAt ?? 0)
+  if (active) return { step: 3, done: [true, true, false, false], tripId: active.id }
+  if (last && !last.notaAt && now - last.finishedAt! < 3 * DAY && !reviewed) return { step: 4, done: [true, true, true, false], tripId: last.id }
+  if (reviewed) return { step: 2, done: [true, false, false, false] }
+  return { step: 1, done: [false, false, false, false] }
+}

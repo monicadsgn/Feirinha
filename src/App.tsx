@@ -96,7 +96,13 @@ export function App() {
   return (
     <div className="app">
       {tab === 'casa' && (
-        <Casa openQuick={setQuick} openItem={setItem} openReview={() => setReview(true)} openSettings={() => setSettings(true)}
+        <Casa
+          openQuick={setQuick}
+          openItem={setItem}
+          openReview={() => setReview(true)}
+          openSettings={() => setSettings(true)}
+          openNota={() => setNota(true)}
+          go={setTab}
           onReminder={(a) =>
             a === 'review'
               ? setReview(true)

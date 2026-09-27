@@ -2,27 +2,45 @@ import { useMemo, useState } from 'react'
 import { suggestPair, type QuickMode } from '../components/QuickAdd'
 import { hasDraft, toast } from '../components/ui'
 import { PLACES, PLACE_ORDER } from '../data/catalog'
-import { daysLabel, qtyLabel } from '../data/format'
-import { daysUntilFeira, listItemIds, stockInfo, type StockInfo } from '../data/logic'
+import { brl, daysLabel, qtyLabel } from '../data/format'
+import { daysUntilFeira, journey, listItemIds, listEstimate, stockInfo, type StockInfo } from '../data/logic'
 import { dismiss, reminders, type ReminderAction } from '../data/reminders'
-import { addToList, consumeOne, markOut, useDB } from '../data/store'
+import { addToList, consumeOne, markOut, skipNota, useDB } from '../data/store'
 import type { Id, Item, PlaceId } from '../data/types'
+
+type Go = 'lista' | 'mercado'
 
 interface Props {
   openQuick: (m: QuickMode) => void
   openItem: (id: Id) => void
   openReview: () => void
   openSettings: () => void
+  openNota: () => void
+  go: (tab: Go) => void
   onReminder: (a: ReminderAction) => void
 }
 
-export function Casa({ openQuick, openItem, openReview, openSettings, onReminder }: Props) {
+type Status = 'ok' | 'pouco' | 'acabou' | 'conferir'
+
+/** O que mostrar pra cada item: a casa entende Tem / Pouco / Acabou, não "2,3 pacotes". */
+function statusOf(s: StockInfo): { key: Status; label: string } {
+  if (s.status === 'desconhecido') return { key: 'conferir', label: 'a conferir' }
+  if (s.status === 'acabou') return { key: 'acabou', label: s.confirmedOut ? 'Acabou' : 'Acabou?' }
+  if (s.status === 'acabando') return { key: 'pouco', label: 'Pouco' }
+  return { key: 'ok', label: 'Tem' }
+}
+
+const STEPS = ['Ver a casa', 'Lista', 'Mercado', 'Nota']
+
+export function Casa({ openQuick, openItem, openReview, openSettings, openNota, go, onReminder }: Props) {
   const db = useDB()
   const [place, setPlace] = useState<PlaceId | 'todos'>('todos')
   const [, setTick] = useState(0)
-  const notes = reminders(db)
+  const notes = reminders(db).slice(0, 2)
   const inList = listItemIds(db)
   const days = daysUntilFeira(db.settings.ticketDay)
+  const j = journey(db)
+  const est = listEstimate(db)
 
   const rows = useMemo(
     () =>
@@ -34,10 +52,35 @@ export function Casa({ openQuick, openItem, openReview, openSettings, onReminder
   )
 
   const running = rows.filter((r) => (r.s.status === 'acabando' || r.s.status === 'acabou') && !inList.has(r.item.id))
-  const unknown = rows.filter((r) => r.s.status === 'desconhecido').length
+  const toCheck = rows.filter((r) => r.s.status === 'desconhecido').length
   const listCount = inList.size
   const places = PLACE_ORDER.filter((p) => rows.some((r) => r.item.place === p))
   const shown = rows.filter((r) => place === 'todos' || r.item.place === place)
+
+  // o que o cartão principal diz e faz em cada passo
+  const hero = {
+    1: {
+      title: 'Ver o que tem em casa',
+      text: `Feira ${daysLabel(days)}. Passe pelos cômodos e marque só o que está acabando: a lista da feira sai pronta.`,
+      cta: hasDraft('revisao:passo') ? 'Continuar de onde parei' : 'Começar pela geladeira',
+      run: openReview,
+    },
+    2: {
+      title: `Lista pronta: ${listCount} ${listCount === 1 ? 'item' : 'itens'}`,
+      text: `${est.known ? `Estimativa de ${brl(est.total)} pelos últimos preços. ` : ''}Dê uma olhada, ajuste e, no mercado, abra o Modo Mercado.`,
+      cta: 'Ver a lista',
+      run: () => go('lista'),
+    },
+    3: { title: 'Compra em andamento', text: 'Volte pro Modo Mercado: lista e calculadora juntas.', cta: 'Voltar pro mercado', run: () => go('mercado') },
+    4: {
+      title: 'Chegou da feira?',
+      text: 'Leia o QR code da nota fiscal: o app confere preços, o que esqueceu de marcar e o que não veio.',
+      cta: 'Conferir com a nota',
+      run: openNota,
+    },
+  }[j.step]
+
+  const stepAction = [openReview, () => go('lista'), () => go('mercado'), openNota]
 
   return (
     <>
@@ -51,23 +94,63 @@ export function Casa({ openQuick, openItem, openReview, openSettings, onReminder
         </button>
       </div>
 
+      <div className="hero">
+        <div className="journey" role="list" aria-label="Caminho da feira">
+          {STEPS.map((label, i) => {
+            const n = i + 1
+            const cls = n === j.step ? 'now' : j.done[i] ? 'done' : ''
+            return (
+              <button key={label} className={cls} role="listitem" onClick={stepAction[i]} aria-current={n === j.step ? 'step' : undefined}>
+                <span className="n">{j.done[i] && n !== j.step ? '✓' : n}</span>
+                {label}
+              </button>
+            )
+          })}
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>{hero.title}</div>
+        <div className="small" style={{ opacity: 0.9, marginTop: 4 }}>
+          {hero.text}
+        </div>
+        <button className="btn block" style={{ marginTop: 12 }} onClick={hero.run}>
+          {hero.cta}
+        </button>
+        {j.step === 2 && (
+          <button className="btn ghost sm block" style={{ marginTop: 4 }} onClick={openReview}>
+            Ver a casa de novo
+          </button>
+        )}
+        {j.step === 4 && j.tripId && (
+          <button className="btn ghost sm block" style={{ marginTop: 4 }} onClick={() => skipNota(j.tripId!)}>
+            Pular (fiquei sem a nota)
+          </button>
+        )}
+      </div>
+
+      <button className="search" style={{ marginTop: 12, minHeight: 46 }} onClick={() => openQuick('acabou')}>
+        <span>🫙</span>
+        <span className="grow small">Acabou alguma coisa?</span>
+        <span className="small" style={{ color: 'var(--accent)' }}>
+          Marcar ›
+        </span>
+      </button>
+
       {notes.length > 0 && (
-        <div className="stack" style={{ gap: 8, marginBottom: 14 }}>
+        <div className="stack" style={{ gap: 4, marginTop: 8 }}>
           {notes.map((n) => (
-            <div key={n.key} className="card row" style={{ padding: '10px 12px', gap: 10 }}>
-              <span style={{ fontSize: 22 }}>{n.icon}</span>
-              <span className="grow small" style={{ fontWeight: 600 }}>
+            <div key={n.key} className="row small" style={{ gap: 8, padding: '6px 4px' }}>
+              <span>{n.icon}</span>
+              <span className="grow" style={{ fontWeight: 600 }}>
                 {n.text}
               </span>
               {n.action && (
-                <button className="btn sm primary" onClick={() => onReminder(n.action!.run)}>
+                <button className="btn sm ghost" style={{ minHeight: 30, padding: '0 6px' }} onClick={() => onReminder(n.action!.run)}>
                   {n.action.label}
                 </button>
               )}
               <button
-                className="icon-btn"
-                style={{ width: 32, height: 32, fontSize: 14 }}
                 aria-label="Dispensar"
+                className="muted"
+                style={{ padding: 4 }}
                 onClick={() => {
                   dismiss(n.key)
                   setTick((t) => t + 1)
@@ -80,34 +163,7 @@ export function Casa({ openQuick, openItem, openReview, openSettings, onReminder
         </div>
       )}
 
-      <button className="search" onClick={() => openQuick('acabou')}>
-        <span style={{ fontSize: 20 }}>🫙</span>
-        <span className="grow">Acabou alguma coisa?</span>
-        <span className="badge red">Acabou / −1</span>
-      </button>
-
-      <div className="hero" style={{ marginTop: 14 }}>
-        <div className="row between">
-          <div>
-            <div style={{ opacity: 0.85, fontWeight: 700 }}>Próxima feira {daysLabel(days)}</div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 800 }}>
-              {listCount} {listCount === 1 ? 'item' : 'itens'} na lista
-            </div>
-          </div>
-          <span style={{ fontSize: 40 }}>🧺</span>
-        </div>
-        <button className="btn block" style={{ marginTop: 12 }} onClick={openReview}>
-          {hasDraft('revisao:passo') ? 'Continuar revisão' : 'Revisar despensa'}
-        </button>
-        {unknown > 0 && (
-          <div className="small" style={{ marginTop: 8, opacity: 0.85 }}>
-            {unknown} {unknown === 1 ? 'item ainda não tem' : 'itens ainda não têm'} estoque informado. A revisão resolve isso em poucos
-            toques.
-          </div>
-        )}
-      </div>
-
-      {running.length > 0 && (
+      {j.step !== 1 && running.length > 0 && (
         <div className="section">
           <div className="section-title">
             <span>Provavelmente acabando</span>
@@ -132,7 +188,7 @@ export function Casa({ openQuick, openItem, openReview, openSettings, onReminder
                   suggestPair(item.id)
                 }}
               >
-                <span className={'badge ' + (s.status === 'acabou' ? 'red' : 'yellow')}>{s.status === 'acabou' ? (s.confirmedOut ? 'acabou' : 'acabou?') : `~${Math.max(1, Math.round(s.daysLeft ?? 0))}d`}</span>
+                <span className={'status-tag ' + statusOf(s).key}>{statusOf(s).label}</span>
                 {item.name} ＋
               </button>
             ))}
@@ -141,6 +197,10 @@ export function Casa({ openQuick, openItem, openReview, openSettings, onReminder
       )}
 
       <div className="section">
+        <div className="section-title">
+          <span>O que tem em casa</span>
+          {toCheck > 0 && <span style={{ textTransform: 'none', letterSpacing: 0 }}>{toCheck} a conferir</span>}
+        </div>
         <div className="chips">
           <button className={'chip' + (place === 'todos' ? ' on' : '')} onClick={() => setPlace('todos')}>
             Tudo
@@ -183,32 +243,28 @@ export function Casa({ openQuick, openItem, openReview, openSettings, onReminder
 }
 
 function PantryRow({ item, s, inList, onOpen }: { item: Item; s: StockInfo; inList: boolean; onOpen: () => void }) {
-  const pct = s.est == null ? 0 : Math.min(100, (s.est / Math.max(item.defaultQty, 0.01)) * 100)
-  const tone = s.status === 'acabou' ? 'red' : s.status === 'acabando' ? 'warn' : ''
+  const st = statusOf(s)
+  const detail =
+    s.est == null
+      ? (item.note ?? `costuma levar ${qtyLabel(item.defaultQty, item.unit)}`)
+      : s.status === 'acabou'
+        ? s.confirmedOut
+          ? 'marcado como acabou'
+          : 'pela conta do app, já deve ter acabado'
+        : `~${qtyLabel(+s.est.toFixed(1), item.unit)}${s.daysLeft != null && isFinite(s.daysLeft) ? ` · dura uns ${Math.round(s.daysLeft)} dias` : ''}`
   return (
-    <div className="li" onClick={onOpen} style={{ cursor: 'pointer' }}>
-      <div className="grow">
-        <div className="row" style={{ gap: 6 }}>
-          <span className="title ellipsis">{item.name}</span>
-          {inList && <span className="badge green">na lista</span>}
+    <div className="li" onClick={onOpen} style={{ cursor: 'pointer', minHeight: 56 }}>
+      <div className="grow" style={{ minWidth: 0 }}>
+        <div className="title ellipsis">{item.name}</div>
+        <div className="row small" style={{ gap: 6, marginTop: 2 }}>
+          <span className={'status-tag ' + st.key}>{st.label}</span>
+          {inList && <span className="small" style={{ color: 'var(--primary)', fontWeight: 700, whiteSpace: 'nowrap' }}>· na lista</span>}
+          <span className="muted ellipsis">{detail}</span>
         </div>
-        <div className="small muted">
-          {s.est == null
-            ? 'estoque não informado'
-            : s.status === 'acabou'
-              ? s.confirmedOut
-                ? 'acabou'
-                : 'pela estimativa, já deve ter acabado'
-              : `~${qtyLabel(+s.est.toFixed(1), item.unit)}${s.daysLeft != null && isFinite(s.daysLeft) ? ` · uns ${Math.round(s.daysLeft)} dias` : ''}`}
-        </div>
-        {s.est != null && (
-          <div className={'meter ' + tone}>
-            <i style={{ width: `${pct}%` }} />
-          </div>
-        )}
       </div>
       <button
         className="btn sm"
+        style={{ minHeight: 34, padding: '0 10px' }}
         onClick={(e) => {
           e.stopPropagation()
           consumeOne(item.id)
@@ -218,7 +274,8 @@ function PantryRow({ item, s, inList, onOpen }: { item: Item; s: StockInfo; inLi
         −1
       </button>
       <button
-        className="btn sm accent"
+        className="btn sm"
+        style={{ minHeight: 34, padding: '0 10px', color: 'var(--accent)' }}
         onClick={(e) => {
           e.stopPropagation()
           markOut(item.id)

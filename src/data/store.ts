@@ -615,6 +615,14 @@ export function importNota(lines: NotaLine[], dest: { shopId: Id; when: number; 
   return tripId
 }
 
+/** "Pular" a conferência com a nota (compra sem nota, ou nota perdida). */
+export function skipNota(tripId: Id) {
+  commit((d) => {
+    const t = d.trips[tripId]
+    if (t) Object.assign(t, { notaAt: Date.now(), updatedAt: Date.now() })
+  })
+}
+
 /** Compra finalizada há pouco e ainda não conferida com a nota. */
 export function tripToCheck(d: DB): Trip | undefined {
   return Object.values(d.trips)

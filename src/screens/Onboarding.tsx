@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
+import { clearDraft, useDraft } from '../components/ui'
 import { CATEGORIES, SEED_ITEMS } from '../data/catalog'
 import { qtyLabel } from '../data/format'
 import { finishOnboarding, getDB, importText } from '../data/store'
@@ -6,15 +7,17 @@ import type { CategoryId } from '../data/types'
 
 /** Primeiro acesso: nome, ticket e o que vocês costumam comprar. */
 export function Onboarding({ onDone }: { onDone: () => void }) {
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useDraft('cadastro:passo', 0)
   // num recadastro, nome e ticket já vêm preenchidos
   const prev = getDB().settings
-  const [me, setMe] = useState(prev.me)
-  const [other, setOther] = useState(prev.people.find((p) => p !== prev.me) ?? '')
-  const [ticket, setTicket] = useState(prev.ticketMonthly ? prev.ticketMonthly.toFixed(2).replace('.', ',') : '')
-  const [day, setDay] = useState(String(prev.ticketDay || 5))
-  const [picked, setPicked] = useState<Set<string>>(() => new Set(SEED_ITEMS.filter((i) => i.origin === 'lista').map((i) => i.key)))
-  const [paste, setPaste] = useState('')
+  const [me, setMe] = useDraft('cadastro:nome', prev.me)
+  const [other, setOther] = useDraft('cadastro:outro', prev.people.find((p) => p !== prev.me) ?? '')
+  const [ticket, setTicket] = useDraft('cadastro:ticket', prev.ticketMonthly ? prev.ticketMonthly.toFixed(2).replace('.', ',') : '')
+  const [day, setDay] = useDraft('cadastro:dia', String(prev.ticketDay || 5))
+  const [pickedList, setPickedList] = useDraft<string[]>('cadastro:itens', () => SEED_ITEMS.filter((i) => i.origin === 'lista').map((i) => i.key))
+  const picked = useMemo(() => new Set(pickedList), [pickedList])
+  const setPicked = (fn: (p: Set<string>) => Set<string>) => setPickedList((a) => [...fn(new Set(a))])
+  const [paste, setPaste] = useDraft('cadastro:colar', '')
 
   const byCat = useMemo(() => {
     const m = new Map<CategoryId, typeof SEED_ITEMS>()
@@ -41,6 +44,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       [...picked],
     )
     if (paste.trim()) importText(paste)
+    clearDraft('cadastro:')
     onDone()
   }
 

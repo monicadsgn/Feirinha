@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Sheet, Stepper, toast } from '../components/ui'
+import { useMemo } from 'react'
+import { Sheet, Stepper, clearDraft, toast, useDraft } from '../components/ui'
 import { PLACES, PLACE_ORDER } from '../data/catalog'
 import { qtyLabel } from '../data/format'
 import { listItemIds, stockInfo, suggestBuyQty } from '../data/logic'
@@ -17,9 +17,9 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
   const inList = listItemIds(db)
   const items = useMemo(() => Object.values(db.items).filter((i) => !i.deleted), [db.items])
   const places = PLACE_ORDER.filter((p) => items.some((i) => i.place === p))
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useDraft('revisao:passo', 0)
 
-  const [answers, setAnswers] = useState<Answers>(() => {
+  const [answers, setAnswers] = useDraft<Answers>('revisao:respostas', () => {
     const a: Answers = {}
     for (const i of items) {
       const s = stockInfo(db, i)
@@ -30,7 +30,7 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
     return a
   })
 
-  const place = places[step]
+  const place = places[Math.min(step, places.length - 1)]
   const group = items.filter((i) => i.place === place).sort((a, b) => a.name.localeCompare(b.name))
   const toBuy = Object.values(answers).filter((a) => a.answer !== 'ok' && a.buy > 0).length
 
@@ -47,6 +47,7 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
     const all = { ...answers }
     for (const i of items) if (!all[i.id]) all[i.id] = { answer: 'ok', buy: 0 }
     applyReview(all)
+    clearDraft('revisao:')
     toast(`Lista montada com ${toBuy} ${toBuy === 1 ? 'item' : 'itens'} 🧺`)
     onDone()
   }

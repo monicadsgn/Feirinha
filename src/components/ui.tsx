@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { qtyLabel } from '../data/format'
 import type { Unit } from '../data/types'
 
@@ -155,3 +155,43 @@ export const embedded = (() => {
     return true
   }
 })()
+
+// ---------- Rascunho (não perde o que foi preenchido se o app fechar) ----------
+
+const DRAFT = 'feirinha:rascunho:'
+
+export function useDraft<T>(key: string, init: T | (() => T)): [T, (v: T | ((prev: T) => T)) => void] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT + key)
+      if (raw != null) return JSON.parse(raw) as T
+    } catch {
+      /* sem storage */
+    }
+    return typeof init === 'function' ? (init as () => T)() : init
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem(DRAFT + key, JSON.stringify(value))
+    } catch {
+      /* sem storage */
+    }
+  }, [key, value])
+  return [value, setValue]
+}
+
+export function hasDraft(key: string): boolean {
+  try {
+    return localStorage.getItem(DRAFT + key) != null
+  } catch {
+    return false
+  }
+}
+
+export function clearDraft(prefix: string) {
+  try {
+    for (const k of Object.keys(localStorage)) if (k.startsWith(DRAFT + prefix)) localStorage.removeItem(k)
+  } catch {
+    /* sem storage */
+  }
+}

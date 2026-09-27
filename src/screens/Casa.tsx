@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { suggestPair, type QuickMode } from '../components/QuickAdd'
-import { toast } from '../components/ui'
+import { hasDraft, toast } from '../components/ui'
 import { PLACES, PLACE_ORDER } from '../data/catalog'
 import { daysLabel, qtyLabel } from '../data/format'
 import { daysUntilFeira, listItemIds, stockInfo, type StockInfo } from '../data/logic'
@@ -97,7 +97,7 @@ export function Casa({ openQuick, openItem, openReview, openSettings, onReminder
           <span style={{ fontSize: 40 }}>🧺</span>
         </div>
         <button className="btn block" style={{ marginTop: 12 }} onClick={openReview}>
-          Revisar despensa
+          {hasDraft('revisao:passo') ? 'Continuar revisão' : 'Revisar despensa'}
         </button>
         {unknown > 0 && (
           <div className="small" style={{ marginTop: 8, opacity: 0.85 }}>

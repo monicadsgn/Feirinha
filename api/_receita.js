@@ -29,6 +29,30 @@ function blocked(host) {
 }
 
 
+/** Título + descrição de um vídeo do YouTube (a página traz os dois num JSON interno). */
+async function youtubeDescription(url) {
+  const id = url.hostname.includes('youtu.be') ? url.pathname.slice(1) : url.searchParams.get('v') || (url.pathname.match(/\/(shorts|live)\/([\w-]+)/) || [])[2]
+  if (!id) return null
+  const r = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(id)}&hl=pt-BR`, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36', 'Accept-Language': 'pt-BR,pt;q=0.9', Cookie: 'CONSENT=YES+1' },
+    signal: AbortSignal.timeout(10000),
+  })
+  const html = await r.text()
+  const desc = /"shortDescription":"((?:\\.|[^"\\])*)"/.exec(html)
+  const title = /"title":"((?:\\.|[^"\\])*)","lengthSeconds"/.exec(html) || /<meta name="title" content="([^"]*)"/.exec(html)
+  if (!desc && !title) return null
+  const unjson = (s) => {
+    try {
+      return JSON.parse(`"${s}"`)
+    } catch {
+      return decode(s)
+    }
+  }
+  const t = title ? unjson(title[1]) : ''
+  const d = desc ? unjson(desc[1]) : ''
+  return { title: decode(t).slice(0, 80), text: [t, d].filter(Boolean).join('\n\n').trim(), image: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` }
+}
+
 /** Busca título e legenda. Lança Error com mensagem amigável se não conseguir. */
 export async function fetchRecipeMeta(raw) {
   let url
@@ -39,6 +63,11 @@ export async function fetchRecipeMeta(raw) {
   }
   if (url.protocol !== 'https:' || blocked(url.hostname)) throw new Error('Link inválido.')
   const host = url.hostname.replace(/^www\./, '')
+  // YouTube: a descrição do vídeo costuma ter os ingredientes
+  if (/(youtube\.com|youtu\.be)$/.test(host)) {
+    const yt = await youtubeDescription(url).catch(() => null)
+    if (yt) return { ...yt, source: host, url: url.href }
+  }
   // TikTok e YouTube têm um endereço oficial que devolve o título/legenda
   if (/tiktok\.com$/.test(host) || /(youtube\.com|youtu\.be)$/.test(host)) {
     const o = /tiktok/.test(host) ? `https://www.tiktok.com/oembed?url=${encodeURIComponent(url.href)}` : `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url.href)}`

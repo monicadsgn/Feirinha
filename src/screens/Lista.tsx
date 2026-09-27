@@ -6,9 +6,8 @@ import { lastPrice, listEstimate, ticketLeft } from '../data/logic'
 import { importText, removeFromList, setListQty, undoable, useDB } from '../data/store'
 import type { EntryReason, Id, ListEntry } from '../data/types'
 
+// "acabou"/"acabando" não aparecem: tudo na lista está acabando, a etiqueta só enchia a tela
 const REASON: Partial<Record<EntryReason, [string, string]>> = {
-  acabou: ['acabou', 'red'],
-  acabando: ['acabando', 'yellow'],
   pendente: ['faltou no mercado', 'yellow'],
   par: ['anda junto', 'green'],
 }
@@ -42,27 +41,31 @@ export function Lista({ goMarket, openReview, openItem }: { goMarket: () => void
 
       {entries.length > 0 && (
         <div className="card">
-          <div className="row between">
-            <div>
-              <div className="muted small">Estimativa pelos últimos preços</div>
-              <div className="stat num">{est.known ? brl(est.total) : '—'}</div>
-              {est.unknown > 0 && (
-                <div className="small muted">
-                  {est.unknown} {est.unknown === 1 ? 'item' : 'itens'} ainda sem preço
+          {est.known > 0 ? (
+            <div className="row between">
+              <div>
+                <div className="muted small">Estimativa pelos últimos preços</div>
+                <div className="stat num">{brl(est.total)}</div>
+                {est.unknown > 0 && (
+                  <div className="small muted">
+                    {est.unknown} {est.unknown === 1 ? 'item' : 'itens'} ainda sem preço
+                  </div>
+                )}
+              </div>
+              {db.settings.ticketMonthly > 0 && (
+                <div style={{ textAlign: 'right' }}>
+                  <div className="muted small">Ticket disponível</div>
+                  <div style={{ fontWeight: 800 }} className="num">
+                    {brl(left)}
+                  </div>
+                  {est.total > left && <span className="badge red">~{brl(est.total - left)} em dinheiro</span>}
                 </div>
               )}
             </div>
-            {db.settings.ticketMonthly > 0 && (
-              <div style={{ textAlign: 'right' }}>
-                <div className="muted small">Ticket disponível</div>
-                <div style={{ fontWeight: 800 }} className="num">
-                  {brl(left)}
-                </div>
-                {est.total > left && est.known > 0 && <span className="badge red">~{brl(est.total - left)} em dinheiro</span>}
-              </div>
-            )}
-          </div>
-          <button className="btn primary block" style={{ marginTop: 12 }} onClick={goMarket}>
+          ) : (
+            <div className="small muted">A estimativa de gasto aparece depois da primeira compra, quando o app já souber os preços.</div>
+          )}
+          <button className="btn primary block" style={{ marginTop: 10 }} onClick={goMarket}>
             🛒 Ir pro mercado
           </button>
         </div>
@@ -117,19 +120,21 @@ export function Lista({ goMarket, openReview, openItem }: { goMarket: () => void
             {CATEGORIES[firstOfCat].emoji} {CATEGORIES[firstOfCat].label}
           </div>
         )}
-        <div className="li" onClick={() => openItem(e.itemId)} style={{ cursor: 'pointer' }}>
-          <div className="grow">
-            <div className="title ellipsis">{it.name}</div>
-            {it.note && <div className="small muted ellipsis">{it.note}</div>}
-            <div className="row wrap small muted" style={{ gap: 6 }}>
-              {r && <span className={'badge ' + r[1]}>{r[0]}</span>}
-              {p != null && <span className="num">{brl(p)}/{it.unit}</span>}
-              {e.addedBy && e.addedBy !== db.settings.me && <span>por {e.addedBy}</span>}
-            </div>
+        <div className="li pantry" onClick={() => openItem(e.itemId)}>
+          <div className="grow" style={{ minWidth: 0 }}>
+            <div className="title two-lines">{it.name}</div>
+            {(r || p != null || it.note || (e.addedBy && e.addedBy !== db.settings.me)) && (
+              <div className="row small muted" style={{ gap: 6, marginTop: 2 }}>
+                {r && <span className={'badge ' + r[1]}>{r[0]}</span>}
+                {p != null && <span className="num">{brl(p)}/{it.unit}</span>}
+                {e.addedBy && e.addedBy !== db.settings.me && <span style={{ whiteSpace: 'nowrap' }}>por {e.addedBy}</span>}
+                {it.note && <span className="ellipsis">{it.note}</span>}
+              </div>
+            )}
           </div>
           <Stepper value={e.qty} unit={it.unit} onChange={(v) => (v <= 0 ? removeFromList(e.id) : setListQty(e.id, v))} />
           <button
-            className="icon-btn"
+            className="x-btn"
             aria-label="Tirar da lista"
             onClick={(ev) => {
               ev.stopPropagation()

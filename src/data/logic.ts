@@ -71,8 +71,9 @@ export function stockInfo(db: DB, item: Item, now = Date.now()): StockInfo {
   if (est == null) return { est: null, daysLeft: null, status: 'desconhecido', shortBeforeFeira: false, confirmedOut: false }
   const rate = dailyRate(db, item)
   const daysLeft = rate > 0 ? est / rate : Infinity
-  // "acabou" pela estimativa só quando sobrou menos de ~5% do padrão
-  const status: StockStatus = est <= item.defaultQty * 0.05 ? 'acabou' : daysLeft <= 7 ? 'acabando' : 'ok'
+  // "acabou" pela estimativa só quando sobrou menos de ~5% do padrão;
+  // "pouco" com menos de ~1/3 do que costuma levar (é o que a revisão grava) ou uma semana de uso
+  const status: StockStatus = est <= item.defaultQty * 0.05 ? 'acabou' : est <= item.defaultQty * 0.3 || daysLeft <= 7 ? 'acabando' : 'ok'
   return { est, daysLeft, status, shortBeforeFeira: daysLeft < daysUntilFeira(db.settings.ticketDay, now), confirmedOut: item.stockQty === 0 }
 }
 

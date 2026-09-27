@@ -33,9 +33,17 @@ function statusOf(s: StockInfo): { key: Status; label: string } {
 
 const STEPS = ['Ver a casa', 'Lista', 'Mercado', 'Nota']
 
+const FILTERS: { key: Status; label: string }[] = [
+  { key: 'acabou', label: 'Acabou' },
+  { key: 'pouco', label: 'Pouco' },
+  { key: 'ok', label: 'Tem' },
+  { key: 'conferir', label: 'A conferir' },
+]
+
 export function Casa({ openQuick, openItem, openReview, openSettings, openNota, go, onReminder }: Props) {
   const db = useDB()
   const [place, setPlace] = useState<PlaceId | 'todos'>('todos')
+  const [filter, setFilter] = useState<Status | 'todos'>('todos')
   const [, setTick] = useState(0)
   const [arrumar, setArrumar] = useState(false)
   const notes = reminders(db).slice(0, 2)
@@ -57,7 +65,9 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
   const toCheck = rows.filter((r) => r.s.status === 'desconhecido').length
   const listCount = inList.size
   const places = PLACE_ORDER.filter((p) => rows.some((r) => r.item.place === p))
-  const shown = rows.filter((r) => place === 'todos' || r.item.place === place)
+  const count = (k: Status) => rows.filter((r) => statusOf(r.s).key === k).length
+  const filters = FILTERS.filter((f) => f.key === filter || count(f.key) > 0)
+  const shown = rows.filter((r) => (place === 'todos' || r.item.place === place) && (filter === 'todos' || statusOf(r.s).key === filter))
 
   // o que o cartão principal diz e faz em cada passo
   const hero = {
@@ -109,23 +119,25 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
             )
           })}
         </div>
-        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>{hero.title}</div>
-        <div className="small" style={{ opacity: 0.9, marginTop: 4 }}>
+        <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>{hero.title}</div>
+        <div className="small" style={{ opacity: 0.9, marginTop: 2 }}>
           {hero.text}
         </div>
-        <button className="btn block" style={{ marginTop: 12 }} onClick={hero.run}>
-          {hero.cta}
-        </button>
-        {j.step === 2 && (
-          <button className="btn ghost sm block" style={{ marginTop: 4 }} onClick={openReview}>
-            Ver a casa de novo
+        <div className="row" style={{ gap: 8, marginTop: 10 }}>
+          <button className="btn sm grow" onClick={hero.run}>
+            {hero.cta}
           </button>
-        )}
-        {j.step === 4 && j.tripId && (
-          <button className="btn ghost sm block" style={{ marginTop: 4 }} onClick={() => skipNota(j.tripId!)}>
-            Pular (fiquei sem a nota)
-          </button>
-        )}
+          {j.step === 2 && (
+            <button className="btn ghost sm" onClick={openReview}>
+              Ver a casa de novo
+            </button>
+          )}
+          {j.step === 4 && j.tripId && (
+            <button className="btn ghost sm" onClick={() => skipNota(j.tripId!)}>
+              Fiquei sem a nota
+            </button>
+          )}
+        </div>
       </div>
 
       <button className="search" style={{ marginTop: 12, minHeight: 46 }} onClick={() => openQuick('acabou')}>
@@ -206,8 +218,19 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
           </button>
         </div>
         <div className="chips">
+          <button className={'chip' + (filter === 'todos' ? ' on' : '')} onClick={() => setFilter('todos')}>
+            Tudo <span className="chip-n">{rows.length}</span>
+          </button>
+          {filters.map((f) => (
+            <button key={f.key} className={'chip' + (filter === f.key ? ' on' : '')} onClick={() => setFilter(filter === f.key ? 'todos' : f.key)}>
+              <span className={'dot ' + f.key} />
+              {f.label} <span className="chip-n">{count(f.key)}</span>
+            </button>
+          ))}
+        </div>
+        <div className="chips sm">
           <button className={'chip' + (place === 'todos' ? ' on' : '')} onClick={() => setPlace('todos')}>
-            Tudo
+            Todos os lugares
           </button>
           {places.map((p) => (
             <button key={p} className={'chip' + (place === p ? ' on' : '')} onClick={() => setPlace(p)}>
@@ -236,7 +259,9 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
         )
       })}
 
-      {toCheck > 0 && (
+      {rows.length > 0 && shown.length === 0 && <div className="empty small">Nada aqui com esse filtro.</div>}
+
+      {toCheck > 0 && filter !== 'conferir' && (
         <div className="small muted center" style={{ marginTop: 8 }}>
           {toCheck} {toCheck === 1 ? 'item ainda' : 'itens ainda'} a conferir: passe pela casa pra saber o que tem.
         </div>
@@ -265,26 +290,32 @@ function PantryRow({ item, s, inList, onOpen }: { item: Item; s: StockInfo; inLi
           : 'pela conta do app, já deve ter acabado'
         : `~${qtyLabel(+s.est.toFixed(1), item.unit)}${s.daysLeft != null && isFinite(s.daysLeft) ? ` · dura uns ${Math.round(s.daysLeft)} dias` : ''}`
   return (
-    <div className="li" onClick={onOpen} style={{ cursor: 'pointer', minHeight: 56 }}>
+    <div className="li pantry" onClick={onOpen}>
       <div className="grow" style={{ minWidth: 0 }}>
         <div className="title ellipsis">{item.name}</div>
         <div className="row small" style={{ gap: 6, marginTop: 2 }}>
           <span className={'status-tag ' + st.key}>{st.label}</span>
-          {inList && <span className="small" style={{ color: 'var(--primary)', fontWeight: 700, whiteSpace: 'nowrap' }}>· na lista</span>}
           <span className="muted ellipsis">{detail}</span>
         </div>
       </div>
-      <button
-        className="btn sm"
-        style={{ minHeight: 34, padding: '0 10px', color: 'var(--accent)' }}
-        onClick={(e) => {
-          e.stopPropagation()
-          toastUndo(`${item.name} acabou e foi pra lista`, undoable(() => markOut(item.id)))
-          suggestPair(item.id)
-        }}
-      >
-        Acabou
-      </button>
+      {inList ? (
+        <span className="in-list">📝 na lista</span>
+      ) : (
+        <button
+          className="row-act"
+          onClick={(e) => {
+            e.stopPropagation()
+            if (st.key === 'acabou') {
+              toastUndo(`${item.name} foi pra lista`, undoable(() => addToList(item.id, undefined, 'acabou')))
+            } else {
+              toastUndo(`${item.name} acabou e foi pra lista`, undoable(() => markOut(item.id)))
+            }
+            suggestPair(item.id)
+          }}
+        >
+          {st.key === 'acabou' ? '＋ Lista' : 'Acabou'}
+        </button>
+      )}
     </div>
   )
 }

@@ -147,6 +147,7 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
         <span className={'check' + (l?.status === 'pego' ? ' on' : l?.status === 'faltou' ? ' no' : '')}>{l?.status === 'pego' ? '✓' : l?.status === 'faltou' ? '✕' : ''}</span>
         <div className="grow">
           <div className="title ellipsis">{it.name}</div>
+          {it.note && !l && <div className="small muted ellipsis">{it.note}</div>}
           <div className="small muted num">
             {qtyLabel(l?.qty ?? qtyFor(it), it.unit)}
             {l?.status === 'faltou' ? ' · não tinha' : !l && lp != null ? ` · últ. ${brl(lp)}` : ''}

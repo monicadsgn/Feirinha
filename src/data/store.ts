@@ -5,6 +5,7 @@ import { normalize } from './format'
 import type { DB, EntryReason, Id, Item, ListEntry, Settings, Shop, Trip, TripKind, TripLine } from './types'
 
 const KEY = 'feirinha:v1'
+export const CATALOG_VERSION = 2
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
 
@@ -134,15 +135,50 @@ export function deleteItem(id: Id) {
   })
 }
 
+const STOP = new Set(['de', 'da', 'do', 'das', 'dos', 'com', 'e', 'o', 'a', 'pra', 'para', 'tb', 'tambem', 'ou', 'um', 'uma'])
+const PACK = /^(bandejas?|pacotes?|pcts?|caixas?|cxs?|latas?|rolos?|macos?|pes?|cachos?|duzias?|dz|un|und|unid|unidades?|kg|g|l|litros?|gramas?|quilos?|garrafas?|potes?|grandes?|pequenos?|\d+(kg|g|l|ml)?)$/
+
+/** Palavras que identificam o item: sem acento, sem "de", sem embalagem, no singular. */
+export function nameTokens(name: string): string[] {
+  return normalize(name.replace(/\(.*?\)/g, ' '))
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .split(' ')
+    .filter((w) => w && !STOP.has(w) && !PACK.test(w))
+    .map((w) => ALIAS[w] ?? w)
+    .map((w) =>
+      w.length > 4 && w.endsWith('oes')
+        ? w.slice(0, -3) + 'ao'
+        : w.length > 4 && w.endsWith('eis')
+          ? w.slice(0, -3) + 'el'
+          : w.length > 3 && /[^s]s$/.test(w)
+            ? w.slice(0, -1)
+            : w,
+    )
+}
+
+/** Jeitos diferentes de escrever a mesma coisa. */
+const ALIAS: Record<string, string> = { artesiano: 'artesanal', nescal: 'nescau', mucarela: 'mussarela', mussarela: 'mussarela', sobrecoxas: 'sobrecoxa' }
+
 export function findItemByName(d: DB, name: string): Item | undefined {
-  const n = normalize(name)
-  if (!n) return undefined
-  const items = Object.values(d.items).filter((i) => !i.deleted)
-  return (
-    items.find((i) => normalize(i.name) === n) ??
-    items.find((i) => normalize(i.name).startsWith(n + ' ')) ??
-    items.find((i) => n.startsWith(normalize(i.name)))
-  )
+  const q = nameTokens(name)
+  if (!q.length) return undefined
+  let best: Item | undefined
+  let bestScore = 0
+  for (const it of Object.values(d.items)) {
+    if (it.deleted) continue
+    const t = nameTokens(it.name)
+    if (!t.length) continue
+    const shared = t.filter((w) => q.includes(w)).length
+    // casa quando um nome contém o outro inteiro ("ovos" ⊂ "bandeja de ovos", "filés de peito" ⊂ "filé de peito de frango")
+    if (shared === t.length || shared === q.length) {
+      const score = shared * 10 - Math.abs(t.length - q.length)
+      if (score > bestScore) {
+        best = it
+        bestScore = score
+      }
+    }
+  }
+  return best
 }
 
 // ---------- Estoque ----------
@@ -246,10 +282,11 @@ export function importText(text: string): { added: number; created: number } {
           unit: parsed.unit ?? 'un',
         })
         created++
-      } else if (parsed.qty) {
-        touch(it).defaultQty = parsed.qty
+      } else {
+        const q = convertQty(parsed.qty, parsed.unit, it.unit)
+        if (q) touch(it).defaultQty = q
       }
-      putInList(d, it.id, parsed.qty ?? it.defaultQty, 'manual', true)
+      putInList(d, it.id, convertQty(parsed.qty, parsed.unit, it.unit) ?? it.defaultQty, 'manual', true)
       added++
     }
   })
@@ -265,15 +302,19 @@ const UNIT_WORDS: [RegExp, Item['unit']][] = [
   [/^(dz|d[uú]zias?)$/i, 'dz'],
   [/^(latas?)$/i, 'lata'],
   [/^(rolos?)$/i, 'rolo'],
+  [/^(bandejas?)$/i, 'bandeja'],
+  [/^(ma[cç]os?)$/i, 'maço'],
+  [/^(p[eé]s?)$/i, 'pé'],
+  [/^(cachos?)$/i, 'cacho'],
   [/^(un|und|unid|unidades?|x)$/i, 'un'],
 ]
 
 export function parseLine(raw: string): { name: string; qty?: number; unit?: Item['unit'] } | null {
-  let line = raw.replace(/^[\s\-•*·✓✔☐☑□▢>]+/, '').replace(/\[.?\]/, '').trim()
+  let line = raw.replace(/^[\s\-•*·✓✔☐☑□▢>]+/, '').replace(/\[.?\]/, '').replace(/⚠.*$/, '').replace(/\s*[—–]\s*$/, '').trim()
   if (!line) return null
   let qty: number | undefined
   let unit: Item['unit'] | undefined
-  const lead = line.match(/^(\d+(?:[.,]\d+)?)\s*([a-zA-Zúç]+\b)?\.?\s*(?:de\s+)?(.*)$/)
+  const lead = line.match(/^(\d+(?:[.,]\d+)?)\s*([a-zA-Zúçéã]+(?![a-zA-Zúçéã]))?\.?\s*(?:de\s+)?(.*)$/)
   if (lead) {
     const u = lead[2] && UNIT_WORDS.find(([re]) => re.test(lead[2]!))
     if (u) {
@@ -282,10 +323,10 @@ export function parseLine(raw: string): { name: string; qty?: number; unit?: Ite
       line = lead[3]!.trim()
     } else {
       qty = parseFloat(lead[1]!.replace(',', '.'))
-      line = ((lead[2] ?? '') + ' ' + lead[3]).trim()
+      line = line.replace(/^\d+(?:[.,]\d+)?\s*/, '')
     }
   } else {
-    const tail = line.match(/^(.*?)\s*[-–:x]?\s*(\d+(?:[.,]\d+)?)\s*(x|un|kg|pct|l|cx)?$/i)
+    const tail = line.match(/^(.*?)\s*[-–—:x]?\s*(\d+(?:[.,]\d+)?)\s*(x|un|kg|g|pcts?|l|cx|latas?|maços?|pés?|cachos?|bandejas?)?\b.*$/i)
     if (tail && tail[1]) {
       qty = parseFloat(tail[2]!.replace(',', '.'))
       unit = tail[3] ? UNIT_WORDS.find(([re]) => re.test(tail[3]!))?.[1] : undefined
@@ -294,6 +335,16 @@ export function parseLine(raw: string): { name: string; qty?: number; unit?: Ite
   }
   if (!line || line.length < 2) return null
   return { name: line, qty: qty && qty > 0 ? qty : undefined, unit }
+}
+
+/** "300 g" num item em kg vira 0,3. Unidades que não convertem são ignoradas. */
+function convertQty(qty: number | undefined, from: Item['unit'] | undefined, to: Item['unit']): number | undefined {
+  if (!qty) return undefined
+  if (!from || from === to) return qty
+  if (from === 'g' && to === 'kg') return +(qty / 1000).toFixed(2)
+  if (from === 'kg' && to === 'g') return qty * 1000
+  if ((from === 'L' && to === 'cx') || (from === 'cx' && to === 'L')) return qty
+  return undefined
 }
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
@@ -409,6 +460,8 @@ export function finishOnboarding(settings: Partial<Settings>, seedKeys: string[]
         place: s.place,
         unit: s.unit,
         defaultQty: s.qty,
+        everyMonths: s.every,
+        note: s.note && s.origin === 'lista' ? s.note : undefined,
         shopId: s.shop,
         pairs: (s.pairs ?? []).filter((p) => keySet.has(p)),
         stockQty: null,
@@ -416,7 +469,7 @@ export function finishOnboarding(settings: Partial<Settings>, seedKeys: string[]
         updatedAt: now,
       }
     }
-    Object.assign(d.settings, settings, { onboarded: true })
+    Object.assign(d.settings, settings, { onboarded: true, catalogVersion: CATALOG_VERSION })
   })
 }
 
@@ -435,5 +488,13 @@ export function importJSON(text: string) {
 export function resetAll() {
   commit((d) => {
     Object.assign(d, emptyDB())
+  })
+}
+
+/** Volta pro cadastro mantendo nome, ticket e lugares. Só usado antes da primeira compra. */
+export function redoOnboarding() {
+  commit((d) => {
+    const { settings, shops } = d
+    Object.assign(d, emptyDB(), { shops, settings: { ...settings, onboarded: false } })
   })
 }

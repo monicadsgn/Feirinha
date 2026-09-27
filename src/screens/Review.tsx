@@ -75,7 +75,8 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
         <i style={{ width: `${((step + 1) / places.length) * 100}%` }} />
       </div>
       <p className="muted small" style={{ margin: '0 0 10px' }}>
-        Dá uma olhada e marque. O que o app acha que acabou já vem marcado.
+        Não precisa contar. Pra cada item: <b>dá até a próxima feira?</b> Se for pouco ou acabou, ajuste quanto comprar (pode deixar 0).
+        O que o app acha que acabou já vem marcado.
       </p>
 
       <div className="stack" style={{ overflowY: 'auto', flex: 1, gap: 8, paddingBottom: 8 }}>
@@ -86,11 +87,13 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
             <div key={it.id} className="card" style={{ padding: 12 }}>
               <div className="row between">
                 <div className="grow">
-                  <div style={{ fontWeight: 800 }} className="ellipsis">
+                  <div style={{ fontWeight: 700 }} className="ellipsis">
                     {it.name}
                   </div>
+                  {it.note && <div className="small muted">{it.note}</div>}
                   <div className="small muted">
                     {inList.has(it.id) ? 'já está na lista · ' : ''}
+                    {it.everyMonths && it.everyMonths > 1 ? `compra a cada ${it.everyMonths} meses · ` : ''}
                     {s.est != null ? `app estima ~${qtyLabel(+s.est.toFixed(1), it.unit)}` : `costuma levar ${qtyLabel(it.defaultQty, it.unit)}`}
                   </div>
                 </div>
@@ -98,7 +101,7 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
               <div className="row" style={{ marginTop: 10, gap: 6 }}>
                 {(
                   [
-                    ['ok', 'Tem'],
+                    ['ok', 'Dá'],
                     ['pouco', 'Pouco'],
                     ['acabou', 'Acabou'],
                   ] as [ReviewAnswer, string][]

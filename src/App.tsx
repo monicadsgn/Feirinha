@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ItemEditor } from './components/ItemEditor'
 import { QuickAdd, suggestPair, type QuickMode } from './components/QuickAdd'
-import { ConfirmHost, Toasts, toast } from './components/ui'
-import { activeTrip, addItem, addToList, findItemByName, getDB, useDB } from './data/store'
+import { ConfirmHost, Toasts, confirmAction, toast } from './components/ui'
+import { activeTrip, addItem, addToList, findItemByName, getDB, redoOnboarding, useDB } from './data/store'
 import { listItemIds } from './data/logic'
 import type { Id } from './data/types'
 import { Ajustes } from './screens/Ajustes'
@@ -58,6 +58,7 @@ export function App() {
       <div className="app">
         <Onboarding onDone={() => setReview(true)} />
         <Toasts />
+        <ConfirmHost />
       </div>
     )
 
@@ -68,7 +69,15 @@ export function App() {
     <div className="app">
       {tab === 'casa' && (
         <Casa openQuick={setQuick} openItem={setItem} openReview={() => setReview(true)} openSettings={() => setSettings(true)}
-          onReminder={(a) => (a === 'review' ? setReview(true) : a === 'acabou' ? setQuick('acabou') : setTab(a))}
+          onReminder={(a) =>
+            a === 'review'
+              ? setReview(true)
+              : a === 'acabou'
+                ? setQuick('acabou')
+                : a === 'refazer'
+                  ? confirmAction('Refazer o cadastro? A despensa e a lista atuais são apagadas. Nome, ticket e lugares continuam.', 'Refazer', redoOnboarding)
+                  : setTab(a)
+          }
         />
       )}
       {tab === 'lista' && <Lista goMarket={() => setTab('mercado')} openReview={() => setReview(true)} openItem={setItem} />}

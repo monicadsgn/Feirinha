@@ -45,7 +45,7 @@ export function dailyRate(db: DB, item: Item): number {
       return consumed / span
     }
   }
-  return Math.max(item.defaultQty, 0.1) / 30
+  return Math.max(item.defaultQty, 0.1) / (30 * (item.everyMonths ?? 1))
 }
 
 export function estimateStock(db: DB, item: Item, now = Date.now()): number | null {

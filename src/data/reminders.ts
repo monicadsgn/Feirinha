@@ -2,7 +2,7 @@ import { brl, DAY } from './format'
 import { cycleStart, daysUntilFeira, nextFeira, ticketLeft } from './logic'
 import type { DB } from './types'
 
-export type ReminderAction = 'review' | 'acabou' | 'lista' | 'mercado'
+export type ReminderAction = 'review' | 'acabou' | 'lista' | 'mercado' | 'refazer'
 
 export interface Reminder {
   /** Muda a cada ciclo/dia, pra que dispensar valha só até o próximo. */
@@ -88,6 +88,16 @@ export function reminders(db: DB, now = Date.now()): Reminder[] {
       icon: '📌',
       text: `${pend} ${pend === 1 ? 'item faltou' : 'itens faltaram'} no mercado. Dá pra pegar em outro lugar.`,
       action: { label: 'Ver', run: 'lista' },
+    })
+  }
+
+  // Cadastro feito com o catálogo antigo e nenhuma compra ainda: oferece refazer
+  if ((s.catalogVersion ?? 1) < 2 && !Object.values(db.trips).some((t) => !t.deleted)) {
+    out.unshift({
+      key: 'catalogo-v2',
+      icon: '✨',
+      text: 'Tem catálogo novo, montado com as suas listas de maio, julho e agosto. Quer refazer o cadastro?',
+      action: { label: 'Refazer', run: 'refazer' },
     })
   }
 

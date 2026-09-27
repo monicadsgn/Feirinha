@@ -5,7 +5,8 @@ export const brl = (v: number) => money.format(v)
 
 export function qtyLabel(qty: number, unit: Unit): string {
   const n = Number.isInteger(qty) ? String(qty) : qty.toFixed(unit === 'kg' || unit === 'L' ? 2 : 1).replace(/0+$/, '').replace('.', ',')
-  return `${n} ${unit}`
+  const plural: Partial<Record<Unit, string>> = { bandeja: 'bandejas', maço: 'maços', pé: 'pés', cacho: 'cachos', lata: 'latas', rolo: 'rolos' }
+  return `${n} ${qty > 1 ? (plural[unit] ?? unit) : unit}`
 }
 
 export const normalize = (s: string) =>

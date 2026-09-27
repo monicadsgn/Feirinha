@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react'
 import { CATEGORIES, SEED_ITEMS } from '../data/catalog'
-import { finishOnboarding, importText } from '../data/store'
+import { qtyLabel } from '../data/format'
+import { finishOnboarding, getDB, importText } from '../data/store'
 import type { CategoryId } from '../data/types'
 
 /** Primeiro acesso: nome, ticket e o que vocês costumam comprar. */
 export function Onboarding({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState(0)
-  const [me, setMe] = useState('')
-  const [other, setOther] = useState('')
-  const [ticket, setTicket] = useState('')
-  const [day, setDay] = useState('5')
-  const [picked, setPicked] = useState<Set<string>>(new Set())
+  // num recadastro, nome e ticket já vêm preenchidos
+  const prev = getDB().settings
+  const [me, setMe] = useState(prev.me)
+  const [other, setOther] = useState(prev.people.find((p) => p !== prev.me) ?? '')
+  const [ticket, setTicket] = useState(prev.ticketMonthly ? prev.ticketMonthly.toFixed(2).replace('.', ',') : '')
+  const [day, setDay] = useState(String(prev.ticketDay || 5))
+  const [picked, setPicked] = useState<Set<string>>(() => new Set(SEED_ITEMS.filter((i) => i.origin === 'lista').map((i) => i.key)))
   const [paste, setPaste] = useState('')
 
   const byCat = useMemo(() => {
@@ -81,46 +84,54 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       {step === 1 && (
         <>
           <div className="card">
-            <h2>O que vocês costumam comprar?</h2>
+            <h2>O que vocês compram?</h2>
             <p className="muted small" style={{ marginBottom: 0 }}>
-              Toque no que entra na feira de vocês. Quantidade, lugar e mercado dá pra ajustar depois. Isso vira sua despensa, e a lista
-              nunca mais começa do zero.
+              Já marquei o que apareceu nas suas listas de maio, julho e agosto, com a quantidade média. Desmarque o que não faz mais
+              sentido. Embaixo de cada grupo tem o que costuma faltar e ideias pra variar, desmarcados.
             </p>
           </div>
-          {byCat.map(([cat, items]) => (
-            <div key={cat}>
-              <div className="section-title">
-                <span>
-                  {CATEGORIES[cat].emoji} {CATEGORIES[cat].label}
-                </span>
-                <button
-                  className="btn sm ghost"
-                  onClick={() =>
-                    setPicked((p) => {
-                      const n = new Set(p)
-                      const all = items.every((i) => n.has(i.key))
-                      for (const i of items) {
-                        if (all) n.delete(i.key)
-                        else n.add(i.key)
-                      }
-                      return n
-                    })
-                  }
-                >
-                  {items.every((i) => picked.has(i.key)) ? 'Nenhum' : 'Todos'}
-                </button>
+          {byCat.map(([cat, items]) => {
+            const fromLists = items.filter((i) => i.origin === 'lista')
+            const extras = items.filter((i) => i.origin !== 'lista')
+            return (
+              <div key={cat}>
+                <div className="section-title">
+                  <span>
+                    {CATEGORIES[cat].emoji} {CATEGORIES[cat].label}
+                  </span>
+                </div>
+                <div className="row wrap" style={{ gap: 8 }}>
+                  {fromLists.map((i) => (
+                    <button key={i.key} className={'chip' + (picked.has(i.key) ? ' on' : '')} onClick={() => toggle(i.key)}>
+                      {i.name}
+                      <span style={{ opacity: 0.75, fontWeight: 500 }}>
+                        · {qtyLabel(i.qty, i.unit)}
+                        {i.every && i.every > 1 ? ` a cada ${i.every} meses` : ''}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {extras.length > 0 && (
+                  <div className="list" style={{ marginTop: 10, boxShadow: 'none', border: '1.5px dashed var(--line)', background: 'transparent' }}>
+                    {extras.map((i) => (
+                      <button key={i.key} className="li" style={{ width: '100%', textAlign: 'left', minHeight: 52, background: 'transparent' }} onClick={() => toggle(i.key)}>
+                        <span className={'check' + (picked.has(i.key) ? ' on' : '')}>{picked.has(i.key) ? '✓' : ''}</span>
+                        <span className="grow">
+                          <span style={{ fontWeight: 700 }}>{i.name}</span>
+                          <span className={'badge ' + (i.origin === 'variar' ? 'green' : 'yellow')} style={{ marginLeft: 6 }}>
+                            {i.origin === 'variar' ? 'pra variar' : 'não estava nas listas'}
+                          </span>
+                          {i.note && <span className="small muted" style={{ display: 'block' }}>{i.note}</span>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="row wrap" style={{ gap: 8 }}>
-                {items.map((i) => (
-                  <button key={i.key} className={'chip' + (picked.has(i.key) ? ' on' : '')} onClick={() => toggle(i.key)}>
-                    {i.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
+            )
+          })}
           <div className="card stack">
-            <h3>Tem a lista da última feira no celular?</h3>
+            <h3>Tem mais alguma lista?</h3>
             <p className="muted small" style={{ margin: 0 }}>
               Cola aqui do jeito que está (uma coisa por linha, tipo “4 arroz” ou “detergente 2”). O que não estiver no catálogo é criado
               sozinho e já entra na lista.

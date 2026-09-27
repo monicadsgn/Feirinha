@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CATEGORIES, PLACES, PLACE_ORDER, UNITS } from '../data/catalog'
+import { CATEGORIES, EVERY_OPTIONS, PLACES, PLACE_ORDER, UNITS, UNIT_NAMES } from '../data/catalog'
 import { brl, dateLabel, qtyLabel } from '../data/format'
 import { itemStats, purchasesOf, stockInfo } from '../data/logic'
 import { deleteItem, setStock, updateItem, useDB } from '../data/store'
@@ -62,9 +62,25 @@ export function ItemEditor({ itemId, onClose }: { itemId: Id; onClose: () => voi
             <span>Unidade</span>
             <select value={item.unit} onChange={(e) => updateItem(item.id, { unit: e.target.value as Unit })}>
               {UNITS.map((u) => (
-                <option key={u}>{u}</option>
+                <option key={u} value={u}>
+                  {UNIT_NAMES[u]} ({u})
+                </option>
               ))}
             </select>
+          </label>
+          <label className="field">
+            <span>De quanto em quanto tempo</span>
+            <select value={item.everyMonths ?? 1} onChange={(e) => updateItem(item.id, { everyMonths: parseInt(e.target.value) === 1 ? undefined : parseInt(e.target.value) })}>
+              {EVERY_OPTIONS.map((o) => (
+                <option key={o.months} value={o.months}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Tipo / tamanho</span>
+            <input defaultValue={item.note ?? ''} placeholder="ex.: garrafa de 1 L" onBlur={(e) => updateItem(item.id, { note: e.target.value.trim() || undefined })} />
           </label>
           <label className="field">
             <span>Corredor</span>

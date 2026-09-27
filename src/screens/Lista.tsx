@@ -120,6 +120,7 @@ export function Lista({ goMarket, openReview, openItem }: { goMarket: () => void
         <div className="li" onClick={() => openItem(e.itemId)} style={{ cursor: 'pointer' }}>
           <div className="grow">
             <div className="title ellipsis">{it.name}</div>
+            {it.note && <div className="small muted ellipsis">{it.note}</div>}
             <div className="row wrap small muted" style={{ gap: 6 }}>
               {r && <span className={'badge ' + r[1]}>{r[0]}</span>}
               {p != null && <span className="num">{brl(p)}/{it.unit}</span>}

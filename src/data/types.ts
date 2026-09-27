@@ -27,7 +27,7 @@ export type CategoryId =
 /** Onde o item fica em casa — usado na revisão da despensa. */
 export type PlaceId = 'geladeira' | 'freezer' | 'armario' | 'fruteira' | 'limpeza' | 'banheiro' | 'outros'
 
-export type Unit = 'un' | 'pct' | 'kg' | 'g' | 'L' | 'cx' | 'dz' | 'lata' | 'rolo'
+export type Unit = 'un' | 'pct' | 'kg' | 'g' | 'L' | 'cx' | 'bandeja' | 'maço' | 'pé' | 'cacho' | 'dz' | 'lata' | 'rolo'
 
 export interface Shop extends Base {
   name: string
@@ -43,6 +43,10 @@ export interface Item extends Base {
   unit: Unit
   /** Quanto costuma comprar numa feira. */
   defaultQty: number
+  /** Compra a cada N meses (sal, açúcar…). Sem valor = todo mês. */
+  everyMonths?: number
+  /** Tamanho/tipo, pra não ter dúvida ("garrafa de 1 L", "da marca X"). */
+  note?: string
   shopId: Id
   /** Itens que costumam andar juntos (macarrão → molho). */
   pairs: Id[]
@@ -93,6 +97,8 @@ export interface Settings {
   lastReviewAt?: number
   /** Dia da semana do lembrete "algo acabou?" (0 = domingo). */
   checkWeekday?: number
+  /** Versão do catálogo usada no cadastro (2 = montado com as listas da casa). */
+  catalogVersion?: number
 }
 
 export interface DB {

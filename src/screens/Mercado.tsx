@@ -4,11 +4,11 @@ import { NotaSheet } from '../components/NotaSheet'
 import { PriceSheet } from '../components/PriceSheet'
 import { QuickAdd } from '../components/QuickAdd'
 import { SwipeRow } from '../components/SwipeRow'
-import { Sheet, confirmAction, toast } from '../components/ui'
+import { Sheet, confirmAction, toast, toastUndo } from '../components/ui'
 import { CATEGORIES } from '../data/catalog'
 import { brl, qtyLabel } from '../data/format'
 import { forgotten, lastPrice, listItemIds, ticketLeft, tripTotal } from '../data/logic'
-import { activeTrip, addToList, cancelTrip, finishTrip, removeLine, setLine, startTrip, upsertShop, useDB } from '../data/store'
+import { activeTrip, addToList, cancelTrip, finishTrip, removeLine, setLine, startTrip, undoable, upsertShop, useDB } from '../data/store'
 import type { CategoryId, DB, Id, Item, Trip, TripKind, TripLine } from '../data/types'
 
 export function Mercado({ onFinished }: { onFinished: () => void }) {
@@ -89,8 +89,7 @@ function Start({ db }: { db: DB }) {
             <button
               className="btn sm ghost"
               onClick={() => {
-                miss.forEach((i) => addToList(i.id, undefined, 'acabando'))
-                toast(`${miss.length} itens foram pra lista`)
+                toastUndo(`${miss.length} itens foram pra lista`, undoable(() => miss.forEach((i) => addToList(i.id, undefined, 'acabando'))))
               }}
             >
               Todos

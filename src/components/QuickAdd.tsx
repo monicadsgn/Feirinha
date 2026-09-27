@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react'
 import { CATEGORIES } from '../data/catalog'
 import { normalize, qtyLabel } from '../data/format'
 import { itemStats, listItemIds, pairSuggestions, stockInfo } from '../data/logic'
-import { addItem, addToList, getDB, markOut, useDB, consumeOne } from '../data/store'
+import { addItem, addToList, consumeOne, getDB, markOut, undoable, useDB } from '../data/store'
 import type { Id, Item } from '../data/types'
-import { Sheet, toast } from './ui'
+import { Sheet, toast, toastUndo } from './ui'
+import { speechSupported, useSpeech } from './useSpeech'
+import { looksLikeCommand, parseCommand, runCommand } from '../data/voice'
 
 export type QuickMode = 'acabou' | 'lista' | 'extra'
 
@@ -48,22 +50,42 @@ export function QuickAdd({ mode, onClose, onPick }: { mode: QuickMode; onClose: 
 
   const exact = items.some((i) => normalize(i.name) === normalize(q))
 
+  /** Frase falada ou digitada ("acabou arroz e feijão", "coloca 2 cafés"). */
+  const command = (text: string) => {
+    const cmd = parseCommand(text)
+    if (mode === 'acabou' && !/coloca|adiciona|anota|comprar|preciso/i.test(text)) cmd.intent = 'acabou'
+    const r = runCommand(cmd)
+    if (!r) return toast('Não entendi nenhum item. Tente falar o nome do produto.')
+    toastUndo(r.summary, r.undo)
+    setQ('')
+  }
+  const speech = useSpeech(command)
+
   const pick = (it: Item, action: 'acabou' | 'menos1' | 'lista' | 'extra') => {
     if (action === 'extra') {
       onPick?.(it.id)
       onClose()
       return
     }
+    const clear = () =>
+      setDone((d) => {
+        const n = { ...d }
+        delete n[it.id]
+        return n
+      })
     if (action === 'acabou') {
-      markOut(it.id)
+      const undo = undoable(() => markOut(it.id))
+      toastUndo(`${it.name} acabou e foi pra lista`, () => (undo(), clear()))
       setDone((d) => ({ ...d, [it.id]: 'na lista ✓' }))
       suggestPair(it.id)
     } else if (action === 'menos1') {
-      consumeOne(it.id)
+      const undo = undoable(() => consumeOne(it.id))
+      toastUndo(`Usou 1 ${it.name}`, () => (undo(), clear()))
       const s = stockInfo(getDB(), getDB().items[it.id]!)
       setDone((d) => ({ ...d, [it.id]: s.est != null && s.est > 0 ? `resta ~${qtyLabel(+s.est.toFixed(1), it.unit)}` : 'acabou → na lista ✓' }))
     } else {
-      addToList(it.id)
+      const undo = undoable(() => addToList(it.id))
+      toastUndo(`${it.name} foi pra lista`, () => (undo(), clear()))
       setDone((d) => ({ ...d, [it.id]: 'na lista ✓' }))
       suggestPair(it.id)
     }
@@ -92,11 +114,30 @@ export function QuickAdd({ mode, onClose, onPick }: { mode: QuickMode; onClose: 
       <form
         onSubmit={(e) => {
           e.preventDefault()
+          if (mode !== 'extra' && looksLikeCommand(q)) return command(q)
           if (results[0] && normalize(results[0].name).startsWith(normalize(q)) && q) pick(results[0], mode === 'acabou' ? 'acabou' : mode === 'extra' ? 'extra' : 'lista')
           else if (q.trim()) create()
         }}
       >
-        <input autoFocus placeholder="Buscar ou criar item…" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="done" />
+        <div className="row" style={{ gap: 8 }}>
+          <input autoFocus placeholder={mode === 'extra' ? 'Buscar ou criar item…' : 'Buscar, ou escreva: “acabou arroz e café”'} value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="done" />
+          {speechSupported && mode !== 'extra' && (
+            <button
+              type="button"
+              className={'icon-btn' + (speech.listening ? ' mic-on' : '')}
+              style={{ width: 48, height: 48 }}
+              aria-label={speech.listening ? 'Parar de ouvir' : 'Falar'}
+              onClick={() => (speech.listening ? speech.stop() : speech.start())}
+            >
+              🎤
+            </button>
+          )}
+        </div>
+        {(speech.listening || speech.error) && (
+          <div className="small" style={{ marginTop: 6, color: speech.error ? 'var(--accent)' : 'var(--primary)', fontWeight: 700 }}>
+            {speech.error ?? (speech.partial ? `“${speech.partial}”` : mode === 'acabou' ? 'Ouvindo… ex.: “acabou detergente e arroz”' : 'Ouvindo… ex.: “coloca dois pacotes de café e leite”')}
+          </div>
+        )}
       </form>
 
       <div className="list" style={{ marginTop: 12, overflowY: 'auto', flex: 1 }}>

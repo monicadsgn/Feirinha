@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { ItemEditor } from './components/ItemEditor'
 import { NotaSheet } from './components/NotaSheet'
-import { QuickAdd, suggestPair, type QuickMode } from './components/QuickAdd'
-import { ConfirmHost, Toasts, confirmAction, toast } from './components/ui'
-import { activeTrip, addItem, addToList, findItemByName, getDB, redoOnboarding, updateSettings, useDB } from './data/store'
+import { QuickAdd, type QuickMode } from './components/QuickAdd'
+import { ConfirmHost, Toasts, confirmAction, toast, toastUndo } from './components/ui'
+import { parseCommand, runCommand } from './data/voice'
+import { applyUpdate, useUpdateReady } from './pwa'
+import { activeTrip, getDB, redoOnboarding, updateSettings, useDB } from './data/store'
 import { listItemIds } from './data/logic'
 import { joinCasa, syncAvailable } from './data/sync'
 import type { Id } from './data/types'
@@ -34,6 +36,7 @@ export function App() {
   const [review, setReview] = useState(false)
   const [settings, setSettings] = useState(false)
   const [nota, setNota] = useState(false)
+  const updateReady = useUpdateReady()
   const [share, setShare] = useState<{ title?: string; text?: string; url?: string } | null>(null)
   const [joining, setJoining] = useState(() => syncAvailable && new URLSearchParams(location.search).has('casa'))
 
@@ -55,15 +58,20 @@ export function App() {
         .then(() => toast('Pronto! Agora a despensa e a lista são as mesmas nos dois celulares 🧺'))
         .finally(() => setJoining(false))
     }
-    if (acao === 'acabou') setQuick('acabou')
+    if (acao === 'acabou' && !add && !p.get('voz')) setQuick('acabou')
     if (acao === 'adicionar') setQuick('lista')
     if (tela && TABS.some((t) => t.id === tela)) setTab(tela)
-    if (add && getDB().settings.onboarded) {
-      const it = findItemByName(getDB(), add) ?? addItem(add.replace(/^./, (c) => c.toUpperCase()))
-      addToList(it.id)
-      toast(`${it.name} foi pra lista`)
-      suggestPair(it.id)
+    // ?add=detergente ou ?voz=acabou arroz e feijão (atalho da Siri / Google)
+    const voz = add ?? p.get('voz')
+    if (voz && getDB().settings.onboarded) {
+      const cmd = parseCommand(voz)
+      if (p.get('acao') === 'acabou') cmd.intent = 'acabou'
+      const r = runCommand(cmd)
+      if (r) toastUndo(r.summary, r.undo)
+      else toast('Não entendi nenhum item nesse comando.')
     }
+    if (acao === 'nota') setNota(true)
+    if (acao === 'mercado') setTab('mercado')
     history.replaceState(null, '', location.pathname)
   }, [])
 
@@ -95,6 +103,11 @@ export function App() {
 
   return (
     <div className="app">
+      {updateReady && (
+        <button className="update-bar" onClick={applyUpdate}>
+          ✨ Tem versão nova do Feirinha · <b>Atualizar</b>
+        </button>
+      )}
       {tab === 'casa' && (
         <Casa
           openQuick={setQuick}

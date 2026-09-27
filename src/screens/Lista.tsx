@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Sheet, Stepper, toast } from '../components/ui'
+import { Sheet, Stepper, toast, toastUndo } from '../components/ui'
 import { CATEGORIES, DEFAULT_AISLES } from '../data/catalog'
 import { brl } from '../data/format'
 import { lastPrice, listEstimate, ticketLeft } from '../data/logic'
-import { importText, removeFromList, setListQty, useDB } from '../data/store'
+import { importText, removeFromList, setListQty, undoable, useDB } from '../data/store'
 import type { EntryReason, Id, ListEntry } from '../data/types'
 
 const REASON: Partial<Record<EntryReason, [string, string]>> = {
@@ -133,7 +133,7 @@ export function Lista({ goMarket, openReview, openItem }: { goMarket: () => void
             aria-label="Tirar da lista"
             onClick={(ev) => {
               ev.stopPropagation()
-              removeFromList(e.id)
+              toastUndo(`${it.name} saiu da lista`, undoable(() => removeFromList(e.id)))
             }}
           >
             ✕

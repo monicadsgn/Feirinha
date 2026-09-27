@@ -115,6 +115,37 @@ const touch = <T extends { updatedAt: number }>(r: T): T => {
   return r
 }
 
+// ---------- Desfazer ----------
+
+type Coll = 'items' | 'shops' | 'list' | 'trips' | 'recipes'
+const COLLS: Coll[] = ['items', 'shops', 'list', 'trips', 'recipes']
+
+/**
+ * Roda uma ação e devolve uma função que desfaz exatamente o que ela mudou
+ * (volta os registros pro estado anterior, com updatedAt novo pra sincronizar).
+ */
+export function undoable(fn: () => void): () => void {
+  const before = db
+  fn()
+  const after = db
+  const changed: [Coll, Id][] = []
+  for (const c of COLLS) {
+    const a = before[c] as Record<Id, { updatedAt: number }>
+    const b = after[c] as Record<Id, { updatedAt: number }>
+    for (const id in b) if (!a[id] || a[id]!.updatedAt !== b[id]!.updatedAt) changed.push([c, id])
+  }
+  return () =>
+    commit((d) => {
+      const now = Date.now()
+      for (const [c, id] of changed) {
+        const coll = d[c] as Record<Id, { updatedAt: number; deleted?: boolean }>
+        const prev = (before[c] as Record<Id, { updatedAt: number; deleted?: boolean }>)[id]
+        if (prev) coll[id] = { ...structuredClone(prev), updatedAt: now }
+        else if (coll[id]) Object.assign(coll[id]!, { deleted: true, updatedAt: now })
+      }
+    })
+}
+
 // ---------- Itens ----------
 
 export function createItem(d: DB, name: string, patch: Partial<Item> = {}): Item {

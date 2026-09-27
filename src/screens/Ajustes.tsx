@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { Atalhos } from '../components/Atalhos'
 import { Sheet, confirmAction, embedded, toast } from '../components/ui'
 import { createCasa, inviteLink, leaveCasa, syncAvailable, syncNow, useSync } from '../data/sync'
 import { WEEKDAYS, calendarEvents, googleCalendarUrl, icsFile } from '../data/reminders'
@@ -246,16 +247,7 @@ export function Ajustes({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="card stack" hidden={embedded}>
-          <h3>Atalhos</h3>
-          <p className="small muted" style={{ margin: 0 }}>
-            Instale o Feirinha na tela inicial (no navegador: “Adicionar à tela inicial”). No Android, segurar o ícone mostra “Acabou algo”,
-            “Adicionar” e “Modo Mercado”. No iPhone dá pra criar um Atalho que abre o link abaixo:
-          </p>
-          <code className="small" style={{ wordBreak: 'break-all', background: 'var(--surface-2)', padding: 8, borderRadius: 8 }}>
-            {location.origin + location.pathname}?acao=acabou
-          </code>
-        </div>
+        {!embedded && <Atalhos />}
       </div>
     </Sheet>
   )

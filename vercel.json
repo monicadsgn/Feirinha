@@ -1,6 +1,7 @@
 {
   "regions": ["gru1"],
   "functions": {
-    "api/nfce.js": { "maxDuration": 20 }
+    "api/nfce.js": { "maxDuration": 20 },
+    "api/receita.js": { "maxDuration": 20 }
   }
 }

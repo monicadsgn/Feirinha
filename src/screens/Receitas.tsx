@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Sheet, Stepper, confirmAction, toast } from '../components/ui'
 import { SEED_ITEMS } from '../data/catalog'
 import { brl, qtyLabel } from '../data/format'
@@ -345,6 +345,32 @@ function SaveSheet({ initial, onClose, onSaved }: { initial: Partial<SavedRecipe
   const [off, setOff] = useState<Set<Id>>(new Set())
   const [extra, setExtra] = useState<Id[]>(initial.uses?.filter((u) => !detected.includes(u)) ?? [])
   const uses = [...new Set([...detected.filter((d) => !off.has(d)), ...extra])]
+  const [fetching, setFetching] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+
+  /** Busca título e legenda do post (Instagram, TikTok, YouTube, site de receita). */
+  const fetchCaption = async (link: string) => {
+    if (!/^https:\/\//.test(link.trim())) return
+    setFetching(true)
+    setFetchError(null)
+    try {
+      const r = await fetch(`/api/receita?url=${encodeURIComponent(link.trim())}`)
+      const j = (await r.json().catch(() => ({}))) as { title?: string; text?: string; error?: string }
+      if (!r.ok) throw new Error(j.error ?? 'Não consegui ler esse post.')
+      if (j.text) setText((t) => t || j.text!)
+      if (j.title) setName((n) => n || j.title!)
+    } catch (e) {
+      setFetchError(e instanceof Error ? e.message : 'Não consegui ler esse post.')
+    } finally {
+      setFetching(false)
+    }
+  }
+
+  // chegou pelo "Compartilhar" só com o link: já busca a legenda
+  useEffect(() => {
+    if (initial.url && !initial.text) void fetchCaption(initial.url)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const others = Object.values(db.items)
     .filter((i) => !i.deleted && !uses.includes(i.id))
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -355,7 +381,14 @@ function SaveSheet({ initial, onClose, onSaved }: { initial: Partial<SavedRecipe
         <h2>{initial.id ? 'Editar receita' : 'Salvar receita'}</h2>
         <label className="field">
           <span>Link do post (Instagram, TikTok…)</span>
-          <input id="rec-url" inputMode="url" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} />
+          <div className="row" style={{ gap: 8 }}>
+            <input id="rec-url" inputMode="url" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} />
+            <button className="btn sm" disabled={!url.trim() || fetching} onClick={() => void fetchCaption(url)}>
+              {fetching ? 'Buscando…' : 'Buscar'}
+            </button>
+          </div>
+          {fetching && <span className="small muted">Buscando a legenda do post…</span>}
+          {fetchError && <span className="small" style={{ color: 'var(--warn)' }}>{fetchError}</span>}
         </label>
         <label className="field">
           <span>Nome</span>

@@ -52,6 +52,11 @@ const subs = new Set<() => void>()
 const emit = () => subs.forEach((s) => s())
 let seq = 0
 
+/** Aviso com botão "Desfazer" (fica mais tempo na tela). */
+export function toastUndo(text: string, undo: () => void) {
+  toast(text, { label: 'Desfazer', run: () => { undo(); toast('Desfeito') } }, 7000)
+}
+
 export function toast(text: string, action?: Toast['action'], ms = 4500) {
   const t = { id: ++seq, text, action }
   toasts = [...toasts.slice(-2), t]

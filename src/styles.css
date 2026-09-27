@@ -910,3 +910,31 @@ input[type='checkbox'] {
   background: transparent;
   color: var(--primary-ink);
 }
+
+.update-bar {
+  display: block;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-weight: 600;
+  font-size: 14px;
+  text-align: center;
+}
+
+.icon-btn.mic-on {
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    transform: scale(1.08);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn.mic-on {
+    animation: none;
+  }
+}

@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import { suggestPair, type QuickMode } from '../components/QuickAdd'
-import { hasDraft, toast } from '../components/ui'
+import { hasDraft, toastUndo } from '../components/ui'
 import { PLACES, PLACE_ORDER } from '../data/catalog'
 import { brl, daysLabel, qtyLabel } from '../data/format'
 import { daysUntilFeira, journey, listItemIds, listEstimate, stockInfo, type StockInfo } from '../data/logic'
 import { dismiss, reminders, type ReminderAction } from '../data/reminders'
-import { addToList, consumeOne, markOut, skipNota, useDB } from '../data/store'
+import { addToList, consumeOne, markOut, skipNota, undoable, useDB } from '../data/store'
 import type { Id, Item, PlaceId } from '../data/types'
 
 type Go = 'lista' | 'mercado'
@@ -170,8 +170,8 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
             <button
               className="btn sm ghost"
               onClick={() => {
-                running.forEach((r) => addToList(r.item.id, undefined, r.s.status === 'acabou' ? 'acabou' : 'acabando'))
-                toast(`${running.length} itens foram pra lista`)
+                const undo = undoable(() => running.forEach((r) => addToList(r.item.id, undefined, r.s.status === 'acabou' ? 'acabou' : 'acabando')))
+                toastUndo(`${running.length} itens foram pra lista`, undo)
               }}
             >
               Todos pra lista
@@ -183,8 +183,8 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
                 key={item.id}
                 className="chip"
                 onClick={() => {
-                  addToList(item.id, undefined, s.status === 'acabou' ? 'acabou' : 'acabando')
-                  toast(`${item.name} foi pra lista`)
+                  const undo = undoable(() => addToList(item.id, undefined, s.status === 'acabou' ? 'acabou' : 'acabando'))
+                  toastUndo(`${item.name} foi pra lista`, undo)
                   suggestPair(item.id)
                 }}
               >
@@ -267,7 +267,7 @@ function PantryRow({ item, s, inList, onOpen }: { item: Item; s: StockInfo; inLi
         style={{ minHeight: 34, padding: '0 10px' }}
         onClick={(e) => {
           e.stopPropagation()
-          consumeOne(item.id)
+          toastUndo(`Usou 1 ${item.name}`, undoable(() => consumeOne(item.id)))
         }}
         aria-label={`Usei 1 ${item.name}`}
       >
@@ -278,8 +278,7 @@ function PantryRow({ item, s, inList, onOpen }: { item: Item; s: StockInfo; inLi
         style={{ minHeight: 34, padding: '0 10px', color: 'var(--accent)' }}
         onClick={(e) => {
           e.stopPropagation()
-          markOut(item.id)
-          toast(`${item.name} acabou e foi pra lista`)
+          toastUndo(`${item.name} acabou e foi pra lista`, undoable(() => markOut(item.id)))
           suggestPair(item.id)
         }}
       >

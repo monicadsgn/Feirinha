@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
+import { Arrumar } from '../components/Arrumar'
 import { suggestPair, type QuickMode } from '../components/QuickAdd'
 import { hasDraft, toastUndo } from '../components/ui'
 import { PLACES, PLACE_ORDER } from '../data/catalog'
 import { brl, daysLabel, qtyLabel } from '../data/format'
 import { daysUntilFeira, journey, listItemIds, listEstimate, stockInfo, type StockInfo } from '../data/logic'
 import { dismiss, reminders, type ReminderAction } from '../data/reminders'
-import { addToList, consumeOne, markOut, skipNota, undoable, useDB } from '../data/store'
+import { addToList, markOut, skipNota, undoable, useDB } from '../data/store'
 import type { Id, Item, PlaceId } from '../data/types'
 
 type Go = 'lista' | 'mercado'
@@ -36,6 +37,7 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
   const db = useDB()
   const [place, setPlace] = useState<PlaceId | 'todos'>('todos')
   const [, setTick] = useState(0)
+  const [arrumar, setArrumar] = useState(false)
   const notes = reminders(db).slice(0, 2)
   const inList = listItemIds(db)
   const days = daysUntilFeira(db.settings.ticketDay)
@@ -199,7 +201,9 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
       <div className="section">
         <div className="section-title">
           <span>O que tem em casa</span>
-          {toCheck > 0 && <span style={{ textTransform: 'none', letterSpacing: 0 }}>{toCheck} a conferir</span>}
+          <button className="btn sm ghost" style={{ minHeight: 30, padding: '0 6px' }} onClick={() => setArrumar(true)}>
+            Arrumar
+          </button>
         </div>
         <div className="chips">
           <button className={'chip' + (place === 'todos' ? ' on' : '')} onClick={() => setPlace('todos')}>
@@ -232,6 +236,14 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
         )
       })}
 
+      {toCheck > 0 && (
+        <div className="small muted center" style={{ marginTop: 8 }}>
+          {toCheck} {toCheck === 1 ? 'item ainda' : 'itens ainda'} a conferir: passe pela casa pra saber o que tem.
+        </div>
+      )}
+
+      {arrumar && <Arrumar onClose={() => setArrumar(false)} />}
+
       {rows.length === 0 && (
         <div className="empty">
           <div className="big">🧺</div>
@@ -262,17 +274,6 @@ function PantryRow({ item, s, inList, onOpen }: { item: Item; s: StockInfo; inLi
           <span className="muted ellipsis">{detail}</span>
         </div>
       </div>
-      <button
-        className="btn sm"
-        style={{ minHeight: 34, padding: '0 10px' }}
-        onClick={(e) => {
-          e.stopPropagation()
-          toastUndo(`Usou 1 ${item.name}`, undoable(() => consumeOne(item.id)))
-        }}
-        aria-label={`Usei 1 ${item.name}`}
-      >
-        −1
-      </button>
       <button
         className="btn sm"
         style={{ minHeight: 34, padding: '0 10px', color: 'var(--accent)' }}

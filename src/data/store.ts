@@ -193,10 +193,18 @@ export function updateItem(id: Id, patch: Partial<Item>) {
 }
 
 export function deleteItem(id: Id) {
+  removeItems([id])
+}
+
+/** "Não uso": tira da despensa e da lista (o histórico de compras continua). */
+export function removeItems(ids: Id[]) {
+  const set = new Set(ids)
   commit((d) => {
-    const it = d.items[id]
-    if (it) touch(it).deleted = true
-    for (const e of Object.values(d.list)) if (e.itemId === id) touch(e).deleted = true
+    for (const id of set) {
+      const it = d.items[id]
+      if (it) touch(it).deleted = true
+    }
+    for (const e of Object.values(d.list)) if (set.has(e.itemId) && !e.deleted) touch(e).deleted = true
   })
 }
 
@@ -278,7 +286,7 @@ export function setStock(itemId: Id, qty: number | null) {
   })
 }
 
-export type ReviewAnswer = 'ok' | 'pouco' | 'acabou'
+export type ReviewAnswer = 'ok' | 'pouco' | 'acabou' | 'naouso'
 
 /** Resultado da revisão da despensa: atualiza estoque e monta a lista. */
 export function applyReview(answers: Record<Id, { answer: ReviewAnswer; buy: number }>) {
@@ -287,6 +295,12 @@ export function applyReview(answers: Record<Id, { answer: ReviewAnswer; buy: num
     for (const [itemId, { answer, buy }] of Object.entries(answers)) {
       const it = d.items[itemId]
       if (!it) continue
+      if (answer === 'naouso') {
+        // não faz parte da casa: sai da despensa e da lista
+        touch(it).deleted = true
+        for (const e of Object.values(d.list)) if (e.itemId === itemId && !e.deleted) touch(e).deleted = true
+        continue
+      }
       const est = estimateStock(d, it)
       const stock =
         answer === 'acabou' ? 0 : answer === 'pouco' ? Math.min(est ?? Infinity, it.defaultQty * 0.25) : Math.max(est ?? 0, it.defaultQty)

@@ -8,8 +8,8 @@ import type { Id, Item } from '../data/types'
 
 type Answers = Record<Id, { answer: ReviewAnswer; buy: number }>
 
-const NEXT: Record<ReviewAnswer, ReviewAnswer> = { ok: 'pouco', pouco: 'acabou', acabou: 'ok' }
-const LABEL: Record<ReviewAnswer, string> = { ok: 'Tem', pouco: 'Pouco', acabou: 'Não tem' }
+const NEXT: Record<ReviewAnswer, ReviewAnswer> = { ok: 'pouco', pouco: 'acabou', acabou: 'naouso', naouso: 'ok' }
+const LABEL: Record<ReviewAnswer, string> = { ok: 'Tem', pouco: 'Pouco', acabou: 'Não tem', naouso: 'Não uso' }
 
 /**
  * "Ver o que tem em casa": passa cômodo por cômodo. Tudo começa como "Tem";
@@ -37,14 +37,17 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
   const place = places[cur]
   const group = items.filter((i) => i.place === place).sort((a, b) => a.name.localeCompare(b.name))
   const answerOf = (id: Id): ReviewAnswer => answers[id]?.answer ?? 'ok'
-  const buyingIn = (list: Item[]) => list.filter((i) => answerOf(i.id) !== 'ok' && (answers[i.id]?.buy ?? 0) > 0).length
+  const buyingIn = (list: Item[]) => list.filter((i) => (answerOf(i.id) === 'pouco' || answerOf(i.id) === 'acabou') && (answers[i.id]?.buy ?? 0) > 0).length
   const toBuy = buyingIn(items)
 
   const cycle = (it: Item) => {
     const next = NEXT[answerOf(it.id)]
     setAnswers((a) => ({
       ...a,
-      [it.id]: { answer: next, buy: next === 'ok' ? 0 : next === 'acabou' ? Math.max(a[it.id]?.buy ?? 0, it.defaultQty) : Math.max(suggestBuyQty(db, it), 0.1) },
+      [it.id]: {
+        answer: next,
+        buy: next === 'ok' || next === 'naouso' ? 0 : next === 'acabou' ? Math.max(a[it.id]?.buy ?? 0, it.defaultQty) : Math.max(suggestBuyQty(db, it), 0.1),
+      },
     }))
   }
 
@@ -54,7 +57,8 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
     for (const i of items) if (!all[i.id]) all[i.id] = { answer: 'ok', buy: 0 }
     applyReview(all)
     clearDraft('revisao:')
-    toast(`Lista da feira pronta: ${toBuy} ${toBuy === 1 ? 'item' : 'itens'} 🧺`)
+    const gone = Object.values(all).filter((x) => x.answer === 'naouso').length
+    toast(`Lista da feira pronta: ${toBuy} ${toBuy === 1 ? 'item' : 'itens'} 🧺${gone ? ` · ${gone} fora da despensa` : ''}`)
     onDone()
   }
 
@@ -95,7 +99,7 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
       </div>
 
       <p className="muted small" style={{ margin: '0 0 8px' }}>
-        Tudo começa como <b>Tem</b>. Toque só no que está acabando: 1 toque = Pouco, 2 = Não tem.
+        Tudo começa como <b>Tem</b>. Toque só no que está acabando: 1 toque = <b>Pouco</b>, 2 = <b>Não tem</b> (vai pra lista), 3 = <b>Não uso</b> (sai da despensa).
       </p>
 
       <div className="list" style={{ overflowY: 'auto', flex: 1 }}>
@@ -118,7 +122,7 @@ export function Review({ onClose, onDone }: { onClose: () => void; onDone: () =>
                   {LABEL[ans]}
                 </button>
               </div>
-              {ans !== 'ok' && a && (
+              {(ans === 'pouco' || ans === 'acabou') && a && (
                 <div className="row between">
                   <span className="small" style={{ fontWeight: 700 }}>
                     Comprar

@@ -11,7 +11,7 @@ import { looksLikeCommand, parseCommand, runCommand } from '../data/voice'
 export type QuickMode = 'acabou' | 'lista' | 'extra'
 
 const TITLES: Record<QuickMode, { title: string; hint: string }> = {
-  acabou: { title: 'O que acabou?', hint: 'Toque em “Acabou” e o item já vai pra lista. “−1” só desconta do estoque.' },
+  acabou: { title: 'O que acabou?', hint: '“Acabou” manda pra lista. “Usei 1” é quando abriu um de vários (ex.: 1 dos 4 pacotes de arroz).' },
   lista: { title: 'Adicionar à lista', hint: 'Toque nos itens para colocar na lista. Pode adicionar vários.' },
   extra: { title: 'Pegou algo fora da lista?', hint: 'Fica marcado como extra no resumo do mês.' },
 }
@@ -168,7 +168,7 @@ export function QuickAdd({ mode, onClose, onPick }: { mode: QuickMode; onClose: 
               {mode === 'acabou' ? (
                 <>
                   <button className="btn sm" onClick={() => pick(it, 'menos1')}>
-                    −1
+                    Usei 1
                   </button>
                   <button className="btn sm accent" onClick={() => pick(it, 'acabou')}>
                     Acabou

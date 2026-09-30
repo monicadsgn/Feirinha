@@ -8,7 +8,6 @@ import type { EntryReason, Id, ListEntry } from '../data/types'
 
 // "acabou"/"acabando" não aparecem: tudo na lista está acabando, a etiqueta só enchia a tela
 const REASON: Partial<Record<EntryReason, [string, string]>> = {
-  pendente: ['faltou no mercado', 'yellow'],
   par: ['anda junto', 'green'],
 }
 
@@ -23,9 +22,12 @@ export function Lista({ goMarket, openReview, openItem }: { goMarket: () => void
   const left = ticketLeft(db)
   const shops = Object.values(db.shops).filter((s) => !s.deleted)
 
+  // o que faltou no mercado vem primeiro, separado (é o que o aviso manda ver)
+  const missed = entries.filter((e) => e.reason === 'pendente')
+  const rest = entries.filter((e) => e.reason !== 'pendente')
   const byShop = shops
-    .map((shop) => ({ shop, entries: entries.filter((e) => db.items[e.itemId]!.shopId === shop.id) }))
-    .concat([{ shop: { id: '_', name: 'Sem lugar definido', emoji: '📍' } as never, entries: entries.filter((e) => !db.shops[db.items[e.itemId]!.shopId] || db.shops[db.items[e.itemId]!.shopId]!.deleted) }])
+    .map((shop) => ({ shop, entries: rest.filter((e) => db.items[e.itemId]!.shopId === shop.id) }))
+    .concat([{ shop: { id: '_', name: 'Sem lugar definido', emoji: '📍' } as never, entries: rest.filter((e) => !db.shops[db.items[e.itemId]!.shopId] || db.shops[db.items[e.itemId]!.shopId]!.deleted) }])
     .filter((g) => g.entries.length)
 
   return (
@@ -44,6 +46,21 @@ export function Lista({ goMarket, openReview, openItem }: { goMarket: () => void
 
       {allEntries.length > 5 && (
         <input className="search-input" type="search" placeholder="🔍 Procurar na lista…" value={q} onChange={(e) => setQ(e.target.value)} />
+      )}
+
+      {missed.length > 0 && (
+        <div className="section" style={{ marginTop: 8, marginBottom: 16 }}>
+          <div className="section-title" style={{ color: 'var(--warn)' }}>
+            <span>📌 Faltou no mercado</span>
+            <span>{missed.length}</span>
+          </div>
+          <p className="small muted" style={{ margin: '-4px 4px 8px' }}>
+            Não tinha na última compra. Dá pra pegar em outro lugar ou tirar da lista.
+          </p>
+          <div className="list" style={{ boxShadow: '0 0 0 2px var(--warn-soft), var(--shadow)' }}>
+            {missed.sort((a, b) => db.items[a.itemId]!.name.localeCompare(db.items[b.itemId]!.name)).map((e) => row(e))}
+          </div>
+        </div>
       )}
 
       {allEntries.length > 0 && !words.length && (

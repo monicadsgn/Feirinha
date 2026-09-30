@@ -44,7 +44,9 @@ export function NotaSheet({ tripId, onClose, onDone }: { tripId?: Id; onClose: (
       setLines(
         n.items.map((i) => {
           const m = matchProduct(db, i.name)
-          return { productName: i.name, target: m?.id ?? 'novo', qty: i.qty, notaUnit: i.unit, total: i.total }
+          // sacola do caixa não é item da despensa
+          const skip = !m && /\bsacola|\bsacolas\b/i.test(i.name)
+          return { productName: i.name, target: m?.id ?? (skip ? 'ignorar' : 'novo'), qty: i.qty, notaUnit: i.unit, total: i.total }
         }),
       )
       setShopId(guessShop(db, n.store) ?? Object.values(db.shops).find((s) => !s.deleted)?.id ?? '')
@@ -77,6 +79,14 @@ export function NotaSheet({ tripId, onClose, onDone }: { tripId?: Id; onClose: (
     setDiff(compareNota(dest, lines))
     setRemove(new Set())
     setStep('diff')
+  }
+
+  // liga um produto da nota a um item marcado no mercado (o app lembra na próxima nota)
+  const link = (key: string, itemId: Id) => {
+    if (dest === 'nova') return
+    const next = lines.map((l) => ((l.target === 'novo' ? `novo:${l.productName}` : l.target) === key ? { ...l, target: itemId } : l))
+    setLines(next)
+    setDiff(compareNota(dest, next))
   }
 
   const apply = () => {
@@ -278,13 +288,38 @@ export function NotaSheet({ tripId, onClose, onDone }: { tripId?: Id; onClose: (
               ))}
             </DiffGroup>
 
-            <DiffGroup title="Esqueceu de marcar" hint="Veio na nota e entra na compra." show={diff.added.length > 0}>
-              {diff.added.map((c) => (
-                <div key={c.key} className="row between small" style={{ padding: '6px 0' }}>
-                  <span style={{ fontWeight: 700 }}>{c.name}</span>
-                  <b className="num">{brl(c.total)}</b>
-                </div>
-              ))}
+            <DiffGroup
+              title="Esqueceu de marcar"
+              hint={diff.notInNota.length ? 'Veio na nota e entra na compra. Se for algo que você marcou com outro nome, diga qual é.' : 'Veio na nota e entra na compra.'}
+              show={diff.added.length > 0}
+            >
+              {diff.added.map((c) => {
+                // mesmo valor de algo marcado que "não veio": quase sempre é o mesmo produto com outro nome
+                const twin = diff.notInNota.find((x) => Math.abs(x.app - c.total) < 0.02)
+                return (
+                  <div key={c.key} style={{ padding: '6px 0' }}>
+                    <div className="row between small">
+                      <span style={{ fontWeight: 700 }}>{c.name}</span>
+                      <b className="num">{brl(c.total)}</b>
+                    </div>
+                    {twin && (
+                      <button className="btn sm block" style={{ marginTop: 6, background: 'var(--warn-soft)', color: 'var(--warn)' }} onClick={() => link(c.key, twin.itemId)}>
+                        É o “{twin.name}” que eu marquei (mesmo valor)
+                      </button>
+                    )}
+                    {!twin && diff.notInNota.length > 0 && (
+                      <select value="" onChange={(e) => e.target.value && link(c.key, e.target.value)} style={{ marginTop: 6, padding: '6px 10px' }}>
+                        <option value="">É algo que marquei com outro nome?</option>
+                        {diff.notInNota.map((x) => (
+                          <option key={x.itemId} value={x.itemId}>
+                            {x.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )
+              })}
             </DiffGroup>
 
             <DiffGroup title="Marcado, mas não está na nota" hint="Marque o que não veio: sai da compra e volta pra lista." show={diff.notInNota.length > 0}>
@@ -485,8 +520,12 @@ function WhyCard({ diff, nota }: { diff: NotaDiff; nota: Nota | null }) {
     ['Marcado, mas não está na nota', -sum(diff.notInNota.map((c) => c.app))],
   ]
   const shown = steps.filter(([, v]) => Math.abs(v) >= 0.01)
-  const discount = nota?.discount ?? 0
-  const paid = nota?.paid ?? (discount ? diff.notaTotal - discount : null)
+  // o que ficou de fora da conferência (sacola etc.) e o desconto do caixa
+  const notaTotal = Math.max(nota?.total ?? 0, diff.notaTotal)
+  const ignored = notaTotal - diff.notaTotal
+  const paid = nota?.paid ?? (nota?.discount ? notaTotal - nota.discount : null)
+  // quando a nota só mostra o "valor a pagar", o desconto é a diferença
+  const discount = nota?.discount ?? (paid != null ? Math.max(0, notaTotal - paid) : 0)
   const rest = diff.notaTotal - diff.appTotal - sum(shown.map(([, v]) => v))
   const sign = (v: number) => (v >= 0 ? '+ ' : '− ') + brl(Math.abs(v))
   return (
@@ -508,9 +547,15 @@ function WhyCard({ diff, nota }: { diff: NotaDiff; nota: Nota | null }) {
           <span className="num">{sign(rest)}</span>
         </div>
       )}
+      {ignored >= 0.01 && (
+        <div className="row between small">
+          <span className="muted">Fora da despensa (sacola etc.)</span>
+          <span className="num">{sign(ignored)}</span>
+        </div>
+      )}
       <div className="row between small" style={{ borderTop: '1px solid var(--line)', paddingTop: 6 }}>
         <span>Produtos na nota</span>
-        <b className="num">{brl(diff.notaTotal)}</b>
+        <b className="num">{brl(notaTotal)}</b>
       </div>
       {discount > 0 && (
         <div className="row between small">

@@ -592,7 +592,11 @@ export interface NotaDiff {
 function whyDiff(it: Item, line: TripLine, v: { qty: number; total: number; kg: boolean }): string {
   const { qty, unitPrice } = notaQtyPrice(it, v, line.qty)
   const unit = it.unit
-  if (line.estimated) return `era estimativa (pesou no caixa): ${qtyLabel(line.qty, unit)} × ${brl(line.unitPrice!)} ≈ ${brl(line.unitPrice! * line.qty)}`
+  if (line.estimated)
+    return `era estimativa: o app previu ~${brl(line.unitPrice! * line.qty)} pra ${qtyLabel(line.qty, unit)}; o caixa pesou ${v.kg ? `${String(+v.qty.toFixed(3)).replace('.', ',')} kg × ${brl(v.total / Math.max(v.qty, 0.001))}` : qtyLabel(v.qty, unit)}`
+  // item marcado por kg e a nota cobra por unidade/bandeja (ou o contrário)
+  if (v.kg !== (unit === 'kg' || unit === 'g'))
+    return `a nota cobra ${v.kg ? 'por kg' : 'por unidade'}: ${String(+v.qty.toFixed(3)).replace('.', ',')} × ${brl(v.total / Math.max(v.qty, 0.001))} (você marcou em ${unit})`
   const qtyOff = Math.abs(qty - line.qty) > (unit === 'kg' ? 0.005 : 0.01)
   const priceOff = Math.abs(unitPrice - line.unitPrice!) > 0.01
   if (qtyOff && !priceOff) return `quantidade diferente: marcou ${qtyLabel(line.qty, unit)}, a nota tem ${qtyLabel(qty, unit)}`

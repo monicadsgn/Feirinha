@@ -84,7 +84,7 @@ const ABBR: Record<string, string[]> = {
   deterg: ['detergente'],
   det: ['detergente'],
   amac: ['amaciante'],
-  sab: ['sabao'],
+  sab: ['sabao', 'sabonete'],
   sabon: ['sabonete'],
   pap: ['papel'],
   hig: ['higienico'],
@@ -145,15 +145,52 @@ const ABBR: Record<string, string[]> = {
   milh: ['milho'],
   sard: ['sardinha'],
   liq: ['liquido'],
+  catchup: ['ketchup'],
+  ref: ['refrigerante'],
+  refri: ['refrigerante'],
+  ral: ['ralado'],
+  tritur: ['triturado', 'pote'],
+  ferm: ['fermento'],
+  fleischmann: ['fermento', 'pao'],
+  micro: ['micro', 'onda'],
+  haste: ['cotonete'],
+  hastes: ['cotonete'],
+  packlixo: ['saco', 'lixo'],
+  inst: ['instantaneo'],
+  yakult: ['yakult', 'fermentado'],
+  extrato: ['extrato', 'tomate'],
   liqu: ['liquido'],
 }
 
-const DROP = /^(\d+([.,]\d+)?(kg|g|gr|ml|l|lt|un|und|m|cm|x)?|kg|g|gr|ml|l|un|und|pct|pc|cx|bdj|bandeja|tp|t1|t2|tipo|bov|bovino|resf|resfriado|cong|congelado|kg\.|c\/|s\/|com|de|da|do|e)$/
+const DROP = /^(\d+([.,]\d+)?(kg|g|gr|ml|l|lt|un|und|m|cm|x)?|kg|g|gr|ml|l|un|und|pct|pc|cx|bdj|bandeja|tp|t1|t2|tipo|bov|bovino|resf|resfriado|cong|congelado|congelada|kg\.|c\/|s\/|com|de|da|do|e|pra|para|em)$/
+
+/** Abreviações de mais de uma palavra, trocadas antes de separar as palavras. */
+const PHRASES: [RegExp, string][] = [
+  [/\bl\.?\s*cond\b\.?/g, 'leite condensado '],
+  [/\bleite\s*ferm\b\.?/g, 'leite fermentado '],
+  [/\bbatata\s*p\b\.?/g, 'batata palha '],
+  [/\bmc\s*cain\b/g, 'batata frita '],
+  [/\bap\.?\s*barb\b\.?/g, 'aparelho barbear '],
+  [/\bfl\.?\s*alum\b\.?/g, 'papel aluminio '],
+  [/\bcx\.?\s*mole\b/g, 'coxao mole '],
+  [/\bs\/\s*coxa\b/g, 'sobrecoxa '],
+  [/\bmac\.?\s*inst\b\.?/g, 'miojo macarrao instantaneo '],
+  [/\bdes\.(?=\s*\w)/g, 'desodorante '],
+  [/\b(ervilha\s*\/\s*milho|milho\s*\/\s*ervilha)\b/g, 'dueto milho ervilha '],
+]
+
+/** Palavras que mudam o produto: "leite" não serve pra "leite condensado". */
+const MODIFIERS = new Set(['condensado', 'fermentado', 'palha', 'frita'])
+
+/** Embalagem no nome do item ("Sardinha em lata"): a nota nem sempre traz. */
+const CONTAINERS = new Set(['lata', 'caixa', 'pacote', 'pote', 'refil', 'garrafa', 'sache', 'sachê', 'saco'])
 
 /** Palavras de um nome (da nota ou da despensa), já sem acento, abreviação e plural. */
 export function notaTokens(name: string): string[] {
   const out: string[] = []
-  for (let w of normalize(name.replace(/\(.*?\)/g, ' ')).split(/[^a-z0-9]+/)) {
+  let n = normalize(name.replace(/\(.*?\)/g, ' '))
+  for (const [re, to] of PHRASES) n = n.replace(re, to)
+  for (let w of n.split(/[^a-z0-9]+/)) {
     if (!w || DROP.test(w)) continue
     if (w.length > 3 && /[^s]s$/.test(w)) w = w.slice(0, -1)
     out.push(...(ABBR[w] ?? [w]))
@@ -162,6 +199,16 @@ export function notaTokens(name: string): string[] {
 }
 
 const same = (a: string, b: string) => a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a)))
+
+/** Nome do item e as variações com "/" ("Queijo prato / mussarela" → queijo prato, queijo mussarela, mussarela). */
+function nameVariants(name: string): string[] {
+  const clean = name.replace(/\(.*?\)/g, ' ')
+  const [a, b] = clean.split('/').map((x) => x.trim())
+  if (!b) return [clean]
+  const out = [a!, b]
+  if (!b.includes(' ')) out.push(a!.replace(/\S+$/, b))
+  return out
+}
 
 /** Acha o item da despensa pra um produto da nota. */
 export function matchProduct(db: DB, productName: string): Item | undefined {
@@ -173,15 +220,22 @@ export function matchProduct(db: DB, productName: string): Item | undefined {
   let best: Item | undefined
   let bestScore = 0
   for (const it of items) {
-    const t = notaTokens(it.name)
-    if (!t.length) continue
-    const hits = t.filter((w) => q.some((x) => same(w, x))).length
-    // todas as palavras do item aparecem na nota ("carne moida" em "CARNE MOIDA BOV COXAO MOLE")
-    if (hits !== t.length) continue
-    const score = hits * 10 - (t.length - hits)
-    if (score > bestScore) {
-      best = it
-      bestScore = score
+    for (const variant of nameVariants(it.name)) {
+      const all = notaTokens(variant)
+      // embalagem é opcional ("SARD RALADA" serve pra "Sardinha em lata")
+      const t = all.filter((w) => !CONTAINERS.has(w) || q.includes(w))
+      if (!t.length) continue
+      const hits = t.filter((w) => q.some((x) => same(w, x)))
+      // todas as palavras do item aparecem na nota ("carne moida" em "CARNE MOIDA BOV COXAO MOLE")
+      if (hits.length !== t.length) continue
+      // a nota diz "condensado"/"palha"/… e o item não: é outro produto
+      if (q.some((x) => MODIFIERS.has(x) && !all.includes(x))) continue
+      // mais palavras batendo vence; empate: palavras mais longas (mais específicas)
+      const score = hits.length * 10 + hits.join('').length / 10
+      if (score > bestScore) {
+        best = it
+        bestScore = score
+      }
     }
   }
   return best

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Arrumar } from '../components/Arrumar'
+import { Sobras } from '../components/Sobras'
 import { CountStepper } from '../components/Count'
 import { suggestPair, type QuickMode } from '../components/QuickAdd'
 import { hasDraft, toastUndo } from '../components/ui'
@@ -7,7 +8,7 @@ import { PLACES, PLACE_ORDER } from '../data/catalog'
 import { brl, daysLabel, normalize, qtyLabel } from '../data/format'
 import { countOf, daysUntilFeira, journey, listItemIds, listEstimate, minOf, stockInfo, type StockInfo } from '../data/logic'
 import { dismiss, reminders, type ReminderAction } from '../data/reminders'
-import { addToList, markOut, setCount, skipNota, undoable, useDB } from '../data/store'
+import { addToList, leftovers, markOut, setCount, skipNota, tripWithLeftovers, undoable, useDB } from '../data/store'
 import type { Id, Item, PlaceId } from '../data/types'
 
 type Go = 'lista' | 'mercado'
@@ -49,6 +50,8 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
   const words = normalize(q).split(' ').filter(Boolean)
   const [, setTick] = useState(0)
   const [arrumar, setArrumar] = useState<false | 'uso' | 'contar'>(false)
+  const [sobras, setSobras] = useState(false)
+  const leftTrip = tripWithLeftovers(db)
   const notes = reminders(db).slice(0, 2)
   const inList = listItemIds(db)
   const days = daysUntilFeira(db.settings.ticketDay)
@@ -147,6 +150,19 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
           )}
         </div>
       </div>
+
+      {leftTrip && j.step !== 4 && (
+        <button className="callout" onClick={() => setSobras(true)}>
+          <span>🧺</span>
+          <span className="grow">
+            Ficaram {leftovers(db).length} itens na lista depois da feira
+            <span className="small muted" style={{ display: 'block', fontWeight: 500 }}>
+              Compra já, fica pro mês que vem ou não precisa?
+            </span>
+          </span>
+          <span style={{ color: 'var(--accent)' }}>Organizar ›</span>
+        </button>
+      )}
 
       <button className="search" style={{ marginTop: 12, minHeight: 46 }} onClick={() => openQuick('acabou')}>
         <span>🫙</span>
@@ -292,6 +308,7 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
         </div>
       )}
 
+      {sobras && leftTrip && <Sobras tripId={leftTrip.id} onClose={() => setSobras(false)} />}
       {arrumar && <Arrumar mode={arrumar} onClose={() => setArrumar(false)} />}
 
       {rows.length === 0 && (

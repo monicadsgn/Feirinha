@@ -103,6 +103,8 @@ export interface Trip extends Base {
   notaAt?: number
   /** Total da nota fiscal, quando conferida. */
   notaTotal?: number
+  /** Quando o que ficou na lista depois da feira foi organizado. */
+  leftoversAt?: number
 }
 
 export interface Settings {

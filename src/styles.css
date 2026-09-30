@@ -1087,3 +1087,44 @@ input[type='checkbox'] {
   min-height: 42px;
   margin-bottom: 8px;
 }
+
+/* escolha em 3 partes (depois da feira) */
+.seg {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.seg button {
+  min-height: 34px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.seg button.on {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+.seg button.on.depois {
+  color: var(--primary);
+}
+.seg button.on.naoprecisa {
+  color: var(--muted);
+}
+.callout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--warn-soft);
+  color: var(--ink);
+  text-align: left;
+  font-weight: 700;
+}

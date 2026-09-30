@@ -3,7 +3,8 @@ import { Sheet, Stepper, toast, toastUndo } from '../components/ui'
 import { CATEGORIES, DEFAULT_AISLES } from '../data/catalog'
 import { brl, normalize } from '../data/format'
 import { lastPrice, listEstimate, ticketLeft } from '../data/logic'
-import { importText, removeFromList, setListQty, undoable, useDB } from '../data/store'
+import { importText, removeFromList, setListQty, tripWithLeftovers, undoable, useDB } from '../data/store'
+import { Sobras } from '../components/Sobras'
 import type { EntryReason, Id, ListEntry } from '../data/types'
 
 // "acabou"/"acabando" não aparecem: tudo na lista está acabando, a etiqueta só enchia a tela
@@ -15,6 +16,8 @@ export function Lista({ goMarket, openReview, openItem }: { goMarket: () => void
   const db = useDB()
   const [importing, setImporting] = useState(false)
   const [q, setQ] = useState('')
+  const [sobras, setSobras] = useState(false)
+  const leftTrip = tripWithLeftovers(db)
   const words = normalize(q).split(' ').filter(Boolean)
   const allEntries = Object.values(db.list).filter((e) => !e.deleted && db.items[e.itemId] && !db.items[e.itemId]!.deleted)
   const entries = allEntries.filter((e) => words.every((w) => normalize(db.items[e.itemId]!.name).includes(w)))
@@ -46,6 +49,14 @@ export function Lista({ goMarket, openReview, openItem }: { goMarket: () => void
 
       {allEntries.length > 5 && (
         <input className="search-input" type="search" placeholder="🔍 Procurar na lista…" value={q} onChange={(e) => setQ(e.target.value)} />
+      )}
+
+      {leftTrip && !words.length && (
+        <button className="callout" style={{ marginTop: 0, marginBottom: 8 }} onClick={() => setSobras(true)}>
+          <span>🧺</span>
+          <span className="grow">Organizar o que ficou da feira</span>
+          <span style={{ color: 'var(--accent)' }}>›</span>
+        </button>
       )}
 
       {missed.length > 0 && (
@@ -131,6 +142,7 @@ export function Lista({ goMarket, openReview, openItem }: { goMarket: () => void
         </div>
       )}
 
+      {sobras && leftTrip && <Sobras tripId={leftTrip.id} onClose={() => setSobras(false)} />}
       {importing && <ImportSheet onClose={() => setImporting(false)} />}
     </>
   )

@@ -731,6 +731,46 @@ export function tripToCheck(d: DB): Trip | undefined {
     .sort((a, b) => b.finishedAt! - a.finishedAt!)[0]
 }
 
+// ---------- Depois da feira: o que ficou na lista ----------
+
+/** Última feira do mês finalizada há pouco e com a lista ainda não organizada. */
+export function tripWithLeftovers(d: DB): Trip | undefined {
+  const t = Object.values(d.trips)
+    .filter((x) => !x.deleted && x.kind === 'feira' && x.finishedAt != null)
+    .sort((a, b) => b.finishedAt! - a.finishedAt!)[0]
+  if (!t || t.leftoversAt || Date.now() - t.finishedAt! > 20 * 86_400_000) return undefined
+  return leftovers(d).length ? t : undefined
+}
+
+export function leftovers(d: DB): ListEntry[] {
+  return Object.values(d.list).filter((e) => !e.deleted && d.items[e.itemId] && !d.items[e.itemId]!.deleted)
+}
+
+export type LeftoverChoice = 'depois' | 'proximo' | 'naoprecisa'
+
+/**
+ * - depois: continua na lista (quitanda, mercadinho…);
+ * - proximo: sai da lista agora; a revisão do mês que vem traz de volta se ainda faltar;
+ * - naoprecisa: sai da lista e conta como "tem" na despensa.
+ */
+export function resolveLeftovers(tripId: Id, choices: Record<Id, LeftoverChoice>) {
+  commit((d) => {
+    const now = Date.now()
+    for (const e of leftovers(d)) {
+      const c = choices[e.id]
+      if (!c || c === 'depois') continue
+      touch(e).deleted = true
+      if (c === 'naoprecisa') {
+        const it = d.items[e.itemId]!
+        const est = estimateStock(d, it) ?? 0
+        Object.assign(touch(it), { stockQty: +Math.max(est, it.defaultQty).toFixed(2), stockAt: now })
+      }
+    }
+    const t = d.trips[tripId]
+    if (t) touch(t).leftoversAt = now
+  })
+}
+
 // ---------- Ajustes ----------
 
 export function updateSettings(patch: Partial<Settings>) {

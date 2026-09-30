@@ -1054,3 +1054,36 @@ input[type='checkbox'] {
   height: 20px;
   flex: none;
 }
+
+.num-field {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 3px;
+  min-width: 64px;
+  font-weight: 700;
+  font-size: 14px;
+}
+.num-field input {
+  width: 58px;
+  padding: 4px 2px;
+  border: 0;
+  border-bottom: 1.5px dashed var(--primary);
+  border-radius: 0;
+  background: transparent;
+  text-align: right;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.num-field span {
+  min-width: 0 !important;
+}
+
+.market-tools {
+  margin-top: 4px;
+}
+.search-input {
+  width: 100%;
+  min-height: 42px;
+  margin-bottom: 8px;
+}

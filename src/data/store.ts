@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { CATALOG_V3_NEW, CATALOG_V3_REMOVED, CATALOG_V3_RENAMES, DEFAULT_AISLES, SEED_ITEMS, SEED_SHOPS, guessCategory, type SeedItem } from './catalog'
 import { countOf, estimateStock, suggestBuyQty, suggestCount } from './logic'
-import { normalize } from './format'
+import { brl, normalize, qtyLabel } from './format'
 import { prettyName } from './nfce'
 import type { DB, EntryReason, Id, Item, ListEntry, SavedRecipe, Settings, Shop, Trip, TripKind, TripLine } from './types'
 
@@ -577,15 +577,27 @@ function notaQtyPrice(it: Item, v: { qty: number; total: number; kg: boolean }, 
 
 export interface NotaDiff {
   /** Preço anotado no mercado diferente do da nota (diferença > R$ 0,05 no total). */
-  priceChanges: { itemId: Id; name: string; app: number; nota: number }[]
+  priceChanges: { itemId: Id; name: string; app: number; nota: number; why: string }[]
   /** Estava sem preço no app e a nota preenche. */
   filled: { itemId: Id; name: string; nota: number }[]
   /** Está na nota e não foi marcado no app (esqueceu de marcar ou não estava na lista). */
   added: { key: string; name: string; total: number }[]
   /** Marcado como pego no app, mas não aparece na nota. */
-  notInNota: { itemId: Id; name: string }[]
+  notInNota: { itemId: Id; name: string; app: number }[]
   appTotal: number
   notaTotal: number
+}
+
+/** Por que o valor marcado no mercado não bate com o da nota. */
+function whyDiff(it: Item, line: TripLine, v: { qty: number; total: number; kg: boolean }): string {
+  const { qty, unitPrice } = notaQtyPrice(it, v, line.qty)
+  const unit = it.unit
+  if (line.estimated) return `era estimativa (pesou no caixa): ${qtyLabel(line.qty, unit)} × ${brl(line.unitPrice!)} ≈ ${brl(line.unitPrice! * line.qty)}`
+  const qtyOff = Math.abs(qty - line.qty) > (unit === 'kg' ? 0.005 : 0.01)
+  const priceOff = Math.abs(unitPrice - line.unitPrice!) > 0.01
+  if (qtyOff && !priceOff) return `quantidade diferente: marcou ${qtyLabel(line.qty, unit)}, a nota tem ${qtyLabel(qty, unit)}`
+  if (!qtyOff) return `preço no caixa diferente: marcou ${brl(line.unitPrice!)}, cobrou ${brl(unitPrice)} por ${unit}`
+  return `marcou ${qtyLabel(line.qty, unit)} × ${brl(line.unitPrice!)}, a nota tem ${qtyLabel(qty, unit)} × ${brl(unitPrice)}`
 }
 
 /** Compara a nota com uma compra (em andamento ou já finalizada), sem mudar nada. */
@@ -611,13 +623,13 @@ export function compareNota(tripId: Id, lines: NotaLine[]): NotaDiff {
     if (line.unitPrice == null) diff.filled.push({ itemId: line.itemId, name: v.name, nota: v.total })
     else {
       const app = line.unitPrice * line.qty
-      if (Math.abs(app - v.total) > 0.05) diff.priceChanges.push({ itemId: line.itemId, name: v.name, app, nota: v.total })
+      if (Math.abs(app - v.total) > 0.05) diff.priceChanges.push({ itemId: line.itemId, name: v.name, app, nota: v.total, why: whyDiff(db.items[line.itemId]!, line, v) })
     }
   }
   for (const l of trip.lines) {
     if (l.status !== 'pego') continue
     diff.appTotal += (l.unitPrice ?? 0) * l.qty
-    if (!seen.has(l.itemId)) diff.notInNota.push({ itemId: l.itemId, name: db.items[l.itemId]?.name ?? '?' })
+    if (!seen.has(l.itemId)) diff.notInNota.push({ itemId: l.itemId, name: db.items[l.itemId]?.name ?? '?', app: (l.unitPrice ?? 0) * l.qty })
   }
   return diff
 }

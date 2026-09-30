@@ -40,7 +40,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         me: me.trim() || 'Eu',
         people: [me.trim() || 'Eu', other.trim()].filter(Boolean),
         ticketMonthly: parseFloat(ticket.replace(/\./g, '').replace(',', '.')) || 0,
-        ticketDay: Math.min(28, Math.max(1, parseInt(day) || 5)),
+        ticketDay: Math.min(31, Math.max(1, parseInt(day) || 5)),
       },
       [...picked],
     )

@@ -83,7 +83,7 @@ export function Ajustes({ onClose }: { onClose: () => void }) {
               <input
                 inputMode="numeric"
                 defaultValue={s.ticketDay}
-                onBlur={(e) => updateSettings({ ticketDay: Math.min(28, Math.max(1, parseInt(e.target.value) || 5)) })}
+                onBlur={(e) => updateSettings({ ticketDay: Math.min(31, Math.max(1, parseInt(e.target.value) || 5)) })}
               />
             </label>
           </div>

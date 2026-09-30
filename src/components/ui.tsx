@@ -23,19 +23,52 @@ export function Sheet({ onClose, children, full }: { onClose: () => void; childr
   )
 }
 
-export function Stepper({ value, unit, onChange, min = 0 }: { value: number; unit: Unit; onChange: (v: number) => void; min?: number }) {
+export function Stepper({ value, unit, onChange, min = 0, editable }: { value: number; unit: Unit; onChange: (v: number) => void; min?: number; editable?: boolean }) {
   const step = unit === 'kg' || unit === 'L' ? (value < 1 ? 0.1 : 0.5) : 1
-  const set = (v: number) => onChange(Math.max(min, +v.toFixed(2)))
+  const set = (v: number) => onChange(Math.max(min, +v.toFixed(3)))
   return (
     <div className="stepper" onClick={(e) => e.stopPropagation()}>
       <button type="button" aria-label="Menos" onClick={() => set(value - step)}>
         −
       </button>
-      <span className="num">{qtyLabel(value, unit)}</span>
+      {editable ? <NumberField value={value} unit={unit} onCommit={set} /> : <span className="num">{qtyLabel(value, unit)}</span>}
       <button type="button" aria-label="Mais" onClick={() => set(value + step)}>
         +
       </button>
     </div>
+  )
+}
+
+/** Número que dá pra digitar (ex.: o peso certo da balança, 1,234 kg). */
+export function NumberField({ value, unit, onCommit, label }: { value: number; unit?: string; onCommit: (v: number) => void; label?: string }) {
+  const show = (v: number) => String(+v.toFixed(3)).replace('.', ',')
+  const [text, setText] = useState(show(value))
+  const [focus, setFocus] = useState(false)
+  useEffect(() => {
+    if (!focus) setText(show(value))
+  }, [value, focus])
+  const commit = () => {
+    setFocus(false)
+    const v = parseFloat(text.replace(/\s/g, '').replace(',', '.'))
+    if (Number.isFinite(v) && v >= 0) onCommit(v)
+    else setText(show(value))
+  }
+  return (
+    <label className="num-field">
+      <input
+        inputMode="decimal"
+        aria-label={label ?? 'Quantidade'}
+        value={text}
+        onFocus={(e) => {
+          setFocus(true)
+          e.target.select()
+        }}
+        onChange={(e) => setText(e.target.value.replace(/[^\d,.]/g, ''))}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+      />
+      {unit && <span>{unit}</span>}
+    </label>
   )
 }
 

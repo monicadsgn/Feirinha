@@ -4,7 +4,7 @@ import { CountStepper } from '../components/Count'
 import { suggestPair, type QuickMode } from '../components/QuickAdd'
 import { hasDraft, toastUndo } from '../components/ui'
 import { PLACES, PLACE_ORDER } from '../data/catalog'
-import { brl, daysLabel, qtyLabel } from '../data/format'
+import { brl, daysLabel, normalize, qtyLabel } from '../data/format'
 import { countOf, daysUntilFeira, journey, listItemIds, listEstimate, minOf, stockInfo, type StockInfo } from '../data/logic'
 import { dismiss, reminders, type ReminderAction } from '../data/reminders'
 import { addToList, markOut, setCount, skipNota, undoable, useDB } from '../data/store'
@@ -45,6 +45,8 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
   const db = useDB()
   const [place, setPlace] = useState<PlaceId | 'todos'>('todos')
   const [filter, setFilter] = useState<Status | 'todos'>('todos')
+  const [q, setQ] = useState('')
+  const words = normalize(q).split(' ').filter(Boolean)
   const [, setTick] = useState(0)
   const [arrumar, setArrumar] = useState<false | 'uso' | 'contar'>(false)
   const notes = reminders(db).slice(0, 2)
@@ -68,7 +70,12 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
   const places = PLACE_ORDER.filter((p) => rows.some((r) => r.item.place === p))
   const count = (k: Status) => rows.filter((r) => statusOf(r.s).key === k).length
   const filters = FILTERS.filter((f) => f.key === filter || count(f.key) > 0)
-  const shown = rows.filter((r) => (place === 'todos' || r.item.place === place) && (filter === 'todos' || statusOf(r.s).key === filter))
+  const shown = rows.filter(
+    (r) =>
+      (place === 'todos' || r.item.place === place) &&
+      (filter === 'todos' || statusOf(r.s).key === filter) &&
+      words.every((w) => normalize(r.item.name).includes(w)),
+  )
 
   // o que o cartão principal diz e faz em cada passo
   const hero = {
@@ -223,6 +230,7 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
             </button>
           </span>
         </div>
+        <input className="search-input" type="search" placeholder="🔍 Procurar na despensa…" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="chips">
           <button className={'chip' + (filter === 'todos' ? ' on' : '')} onClick={() => setFilter('todos')}>
             Tudo <span className="chip-n">{rows.length}</span>
@@ -265,7 +273,18 @@ export function Casa({ openQuick, openItem, openReview, openSettings, openNota, 
         )
       })}
 
-      {rows.length > 0 && shown.length === 0 && <div className="empty small">Nada aqui com esse filtro.</div>}
+      {rows.length > 0 && shown.length === 0 && (
+        <div className="empty small">
+          {words.length ? `Nada com “${q}” na despensa.` : 'Nada aqui com esse filtro.'}
+          {words.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <button className="btn sm primary" onClick={() => openQuick('lista')}>
+                ＋ Adicionar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {toCheck > 0 && filter !== 'conferir' && (
         <div className="small muted center" style={{ marginTop: 8 }}>

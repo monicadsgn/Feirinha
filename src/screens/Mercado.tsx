@@ -6,7 +6,7 @@ import { QuickAdd } from '../components/QuickAdd'
 import { SwipeRow } from '../components/SwipeRow'
 import { Sheet, confirmAction, toast, toastUndo } from '../components/ui'
 import { CATEGORIES } from '../data/catalog'
-import { brl, qtyLabel } from '../data/format'
+import { brl, normalize, qtyLabel } from '../data/format'
 import { forgotten, lastPrice, listItemIds, ticketLeft, tripTotal } from '../data/logic'
 import { activeTrip, addToList, cancelTrip, finishTrip, removeLine, setLine, startTrip, undoable, upsertShop, useDB } from '../data/store'
 import type { CategoryId, DB, Id, Item, Trip, TripKind, TripLine } from '../data/types'
@@ -125,6 +125,9 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
   const [showOthers, setShowOthers] = useState(false)
   const [compare, setCompare] = useState<string | null>(null)
   const [nota, setNota] = useState(false)
+  const [show, setShow] = useState<'todos' | 'falta' | 'pego' | 'faltou'>('todos')
+  const [aisle, setAisle] = useState<CategoryId | null>(null)
+  const [q, setQ] = useState('')
 
   const lines = new Map(trip.lines.map((l) => [l.itemId, l]))
   const inList = listItemIds(db)
@@ -153,6 +156,25 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
     const cats = [...order, ...(Object.keys(CATEGORIES) as CategoryId[]).filter((c) => !order.includes(c))]
     return cats.map((c) => ({ c, items: items.filter((i) => i.category === c) })).filter((g) => g.items.length)
   }
+
+  // filtro (como na despensa) + busca por texto
+  const stateOf = (it: Item) => {
+    const st = lines.get(it.id)?.status
+    return st === 'pego' ? 'pego' : st === 'faltou' ? 'faltou' : 'falta'
+  }
+  const words = normalize(q).split(' ').filter(Boolean)
+  const visible = (it: Item) =>
+    (show === 'todos' || stateOf(it) === show) &&
+    (!aisle || it.category === aisle) &&
+    (!words.length || words.every((w) => normalize(`${it.name} ${it.note ?? ''}`).includes(w)))
+  const all = [...here, ...extras, ...others]
+  const counts = { falta: 0, pego: 0, faltou: 0 }
+  for (const it of all) counts[stateOf(it)]++
+  const aislesHere = byAisle(all).map((g) => g.c)
+  const filtering = show !== 'todos' || !!aisle || words.length > 0
+  const vHere = here.filter(visible)
+  const vExtras = extras.filter(visible)
+  const vOthers = others.filter(visible)
 
   const qtyFor = (it: Item) => Object.values(db.list).find((e) => e.itemId === it.id && !e.deleted)?.qty ?? it.defaultQty
 
@@ -225,11 +247,54 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
         )}
       </div>
 
+      <div className="market-tools">
+        <input className="search-input" type="search" placeholder="🔍 Procurar na lista…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="chips">
+          <button className={'chip' + (show === 'todos' ? ' on' : '')} onClick={() => setShow('todos')}>
+            Tudo <span className="chip-n">{all.length}</span>
+          </button>
+          <button className={'chip' + (show === 'falta' ? ' on' : '')} onClick={() => setShow(show === 'falta' ? 'todos' : 'falta')}>
+            Falta pegar <span className="chip-n">{counts.falta}</span>
+          </button>
+          <button className={'chip' + (show === 'pego' ? ' on' : '')} onClick={() => setShow(show === 'pego' ? 'todos' : 'pego')}>
+            ✓ Peguei <span className="chip-n">{counts.pego}</span>
+          </button>
+          {counts.faltou > 0 && (
+            <button className={'chip' + (show === 'faltou' ? ' on' : '')} onClick={() => setShow(show === 'faltou' ? 'todos' : 'faltou')}>
+              Não tinha <span className="chip-n">{counts.faltou}</span>
+            </button>
+          )}
+        </div>
+        <div className="chips sm">
+          <button className={'chip' + (!aisle ? ' on' : '')} onClick={() => setAisle(null)}>
+            Todos os corredores
+          </button>
+          {aislesHere.map((c) => (
+            <button key={c} className={'chip' + (aisle === c ? ' on' : '')} onClick={() => setAisle(aisle === c ? null : c)}>
+              {CATEGORIES[c].emoji} {CATEGORIES[c].label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <p className="small muted center" style={{ margin: '4px 0 10px' }}>
         Toque pra digitar o preço · arraste → pegou · ← não tinha
       </p>
 
-      {byAisle(here).map(({ c, items }) => (
+      {filtering && vHere.length + vExtras.length + vOthers.length === 0 && (
+        <div className="empty small">
+          {words.length ? `Nada com “${q}” na lista.` : 'Nada aqui com esse filtro.'}
+          {words.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <button className="btn sm primary" onClick={() => setExtra(true)}>
+                ＋ Pegar como extra
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {byAisle(vHere).map(({ c, items }) => (
         <div key={c} style={{ marginBottom: 12 }}>
           <div className="section-title">
             <span>
@@ -245,25 +310,25 @@ function Active({ db, trip, onFinished }: { db: DB; trip: Trip; onFinished: () =
 
       {here.length === 0 && <div className="empty">Nada da lista marcado pra esse lugar.</div>}
 
-      {extras.length > 0 && (
+      {vExtras.length > 0 && (
         <div style={{ marginBottom: 12 }}>
           <div className="section-title">
             <span>✨ Extras (fora da lista)</span>
             <span className="num">{brl(t.extras)}</span>
           </div>
-          <div className="list">{extras.map(renderRow)}</div>
+          <div className="list">{vExtras.map(renderRow)}</div>
         </div>
       )}
 
-      {others.length > 0 && (
+      {vOthers.length > 0 && (
         <div style={{ marginBottom: 12 }}>
           <button className="section-title" style={{ width: '100%' }} onClick={() => setShowOthers(!showOthers)}>
             <span>Da lista, mas costuma comprar em outro lugar</span>
             <span>
-              {others.length} {showOthers ? '▲' : '▼'}
+              {vOthers.length} {showOthers || filtering ? '▲' : '▼'}
             </span>
           </button>
-          {showOthers && <div className="list">{others.map(renderRow)}</div>}
+          {(showOthers || filtering) && <div className="list">{vOthers.map(renderRow)}</div>}
         </div>
       )}
 

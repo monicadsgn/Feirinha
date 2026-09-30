@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Sheet, Stepper, toast, toastUndo } from '../components/ui'
 import { CATEGORIES, DEFAULT_AISLES } from '../data/catalog'
-import { brl } from '../data/format'
+import { brl, normalize } from '../data/format'
 import { lastPrice, listEstimate, ticketLeft } from '../data/logic'
 import { importText, removeFromList, setListQty, undoable, useDB } from '../data/store'
 import type { EntryReason, Id, ListEntry } from '../data/types'
@@ -15,7 +15,10 @@ const REASON: Partial<Record<EntryReason, [string, string]>> = {
 export function Lista({ goMarket, openReview, openItem }: { goMarket: () => void; openReview: () => void; openItem: (id: Id) => void }) {
   const db = useDB()
   const [importing, setImporting] = useState(false)
-  const entries = Object.values(db.list).filter((e) => !e.deleted && db.items[e.itemId] && !db.items[e.itemId]!.deleted)
+  const [q, setQ] = useState('')
+  const words = normalize(q).split(' ').filter(Boolean)
+  const allEntries = Object.values(db.list).filter((e) => !e.deleted && db.items[e.itemId] && !db.items[e.itemId]!.deleted)
+  const entries = allEntries.filter((e) => words.every((w) => normalize(db.items[e.itemId]!.name).includes(w)))
   const est = listEstimate(db)
   const left = ticketLeft(db)
   const shops = Object.values(db.shops).filter((s) => !s.deleted)
@@ -30,7 +33,7 @@ export function Lista({ goMarket, openReview, openItem }: { goMarket: () => void
       <div className="page-head">
         <div>
           <div className="muted small">
-            {entries.length} {entries.length === 1 ? 'item' : 'itens'}
+            {allEntries.length} {allEntries.length === 1 ? 'item' : 'itens'}
           </div>
           <h1>Lista</h1>
         </div>
@@ -39,7 +42,11 @@ export function Lista({ goMarket, openReview, openItem }: { goMarket: () => void
         </button>
       </div>
 
-      {entries.length > 0 && (
+      {allEntries.length > 5 && (
+        <input className="search-input" type="search" placeholder="🔍 Procurar na lista…" value={q} onChange={(e) => setQ(e.target.value)} />
+      )}
+
+      {allEntries.length > 0 && !words.length && (
         <div className="card">
           {est.known > 0 ? (
             <div className="row between">
@@ -94,7 +101,9 @@ export function Lista({ goMarket, openReview, openItem }: { goMarket: () => void
         )
       })}
 
-      {entries.length === 0 && (
+      {words.length > 0 && entries.length === 0 && <div className="empty small">Nada com “{q}” na lista. Toque em “Adicionar” pra pôr.</div>}
+
+      {allEntries.length === 0 && (
         <div className="empty">
           <div className="big">📝</div>
           <p>A lista está vazia.</p>

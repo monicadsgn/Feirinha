@@ -1601,6 +1601,23 @@ function estimateStock(db, item, now = Date.now()) {
 	const days = Math.max(0, (now - item.stockAt) / DAY);
 	return Math.max(0, item.stockQty - dailyRate(db, item) * days);
 }
+const COUNT_UNITS = [
+	"un",
+	"pct",
+	"cx",
+	"lata",
+	"rolo",
+	"bandeja",
+	"dz"
+];
+/** Sugestão de "de contar": fica no armário/geladeira/freezer e vem em mais de uma embalagem. */
+function suggestCount(it) {
+	return COUNT_UNITS.includes(it.unit) && it.defaultQty >= 2 && [
+		"armario",
+		"geladeira",
+		"freezer"
+	].includes(it.place) && it.category !== "hortifruti";
+}
 /** Quanto comprar: o que a casa gasta até a feira seguinte, menos o que ainda tem. */
 function suggestBuyQty(db, item) {
 	const est = estimateStock(db, item) ?? 0;
@@ -1821,7 +1838,8 @@ function markOut(itemId) {
 		if (!it) return;
 		Object.assign(touch(it), {
 			stockQty: 0,
-			stockAt: Date.now()
+			stockAt: Date.now(),
+			opened: 0
 		});
 		putInList(d, itemId, it.defaultQty, "acabou");
 	});
@@ -1908,6 +1926,12 @@ function seedToItem(s, keys, now) {
 		note: s.note && s.origin === "lista" ? s.note : void 0,
 		shopId: s.shop,
 		pairs: (s.pairs ?? []).filter((p) => keys.has(p)),
+		count: suggestCount({
+			unit: s.unit,
+			defaultQty: s.qty,
+			place: s.place,
+			category: s.category
+		}) || void 0,
 		stockQty: null,
 		stockAt: null,
 		updatedAt: now

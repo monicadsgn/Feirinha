@@ -7,6 +7,10 @@ export interface Nota {
   /** "2026-09-27T10:32" no horário da nota. */
   date: string | null
   total: number
+  /** Desconto dado no caixa (quando a nota mostra). */
+  discount?: number | null
+  /** Valor a pagar, já com desconto. */
+  paid?: number | null
   items: NotaItem[]
 }
 
@@ -19,11 +23,60 @@ export interface NotaItem {
 }
 
 export async function fetchNota(qrText: string): Promise<Nota> {
+  // plano B: texto da nota colado (página da Sefaz copiada no Safari, ou o cupom)
+  const local = parseNotaText(qrText)
+  if (local) return local
   const url = qrText.trim().match(/https?:\/\/\S+/)?.[0] ?? qrText.trim()
   const res = await fetch(`/api/nfce?url=${encodeURIComponent(url)}`)
   const body = (await res.json().catch(() => ({}))) as Nota & { error?: string }
   if (!res.ok) throw new Error(body.error ?? 'Não consegui abrir essa nota.')
   return body
+}
+
+const num = (s: string): number | null => {
+  const v = parseFloat(s.replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.'))
+  return Number.isFinite(v) ? v : null
+}
+
+/**
+ * Lê o texto de uma nota colado no app. Entende dois jeitos:
+ * - a página da Sefaz copiada ("ARROZ 1KG (Código: 123) Qtde.:2 UN: PCT Vl. Unit.: 5,39 Vl. Total 10,78");
+ * - as linhas do cupom impresso ("00081178 SACO LIXO 30L 1 UNDS 13,97 13,97").
+ * Devolve null quando não parece nota (ex.: é só o link).
+ */
+export function parseNotaText(raw: string): Nota | null {
+  const text = raw.replace(/\r/g, '').replace(/[ \t\u00a0]+/g, ' ')
+  if (text.trim().split('\n').length < 2 && !/C[óo]digo/i.test(text)) return null
+  const items: NotaItem[] = []
+  const portal = /([^\n]+?)\s*\(\s*C[óo]d(?:igo)?\.?:?\s*[\w.-]+\s*\)[\s\S]*?Qtde\.?:?\s*([\d.,]+)[\s\S]*?UN:?\s*([A-Za-z]+)[\s\S]*?Vl\.?\s*Unit\.?:?\s*([\d.,]+)[\s\S]*?Vl\.?\s*Total:?\s*([\d.,]+)/gi
+  let m: RegExpExecArray | null
+  while ((m = portal.exec(text))) {
+    const qty = num(m[2]!) ?? 1
+    const unitPrice = num(m[4]!)
+    items.push({ name: m[1]!.trim(), qty, unit: m[3]!.toUpperCase(), unitPrice, total: num(m[5]!) ?? (unitPrice ?? 0) * qty })
+  }
+  if (!items.length) {
+    const cupom = /^\s*\d{3,14}\s+(.+?)\s+([\d.,]+)\s*(UNDS?|UN|KG|PC|PCT|CX|LT|L|G|FD|DZ|BD)\b\.?\s*(?:X\s*)?([\d.,]+)\s+([\d.,]+)\s*$/gim
+    while ((m = cupom.exec(text))) {
+      const qty = num(m[2]!) ?? 1
+      items.push({ name: m[1]!.trim(), qty, unit: m[3]!.toUpperCase().replace(/^UNDS?$/, 'UN'), unitPrice: num(m[4]!), total: num(m[5]!) ?? 0 })
+    }
+  }
+  if (!items.length) return null
+  const find = (re: RegExp) => {
+    const x = re.exec(text)
+    return x ? num(x[1]!) : null
+  }
+  const dateM = /(?:Emiss[ãa]o:?\s*)?(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2})/.exec(text)
+  const sum = items.reduce((s, i) => s + i.total, 0)
+  return {
+    store: /atacad[ãa]o/i.test(text) ? 'Atacadão' : '',
+    date: dateM ? `${dateM[3]}-${dateM[2]}-${dateM[1]}T${dateM[4]}` : null,
+    total: find(/Valor total\s*R\$:?\s*([\d.,]+)/i) ?? +sum.toFixed(2),
+    discount: find(/Descontos?(?:\s*total)?\s*R\$:?\s*([\d.,]+)/i),
+    paid: find(/Valor a pagar\s*R\$:?\s*([\d.,]+)/i),
+    items,
+  }
 }
 
 /** Abreviações comuns nas notas de supermercado. */

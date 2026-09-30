@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { startPWA } from './pwa'
 import { App } from './App'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { startSync } from './data/sync'
 import { runMigrations } from './data/store'
 import '@fontsource-variable/montserrat'
@@ -14,6 +15,8 @@ runMigrations()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )

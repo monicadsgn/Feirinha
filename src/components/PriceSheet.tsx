@@ -3,7 +3,7 @@ import { gramsOf } from '../data/catalog'
 import { brl, qtyLabel } from '../data/format'
 import { updateItem } from '../data/store'
 import type { Item, TripLine } from '../data/types'
-import { Sheet, Stepper } from './ui'
+import { NumberField, Sheet, Stepper } from './ui'
 
 type Mode = 'unit' | 'total' | 'kg'
 
@@ -77,7 +77,7 @@ export function PriceSheet({
       <div className="stack" style={{ gap: 10 }}>
         <div className="row between">
           <h2 className="ellipsis grow">{item.name}</h2>
-          <Stepper value={qty} unit={item.unit} min={0.1} onChange={setQty} />
+          <Stepper value={qty} unit={item.unit} min={0.001} onChange={setQty} editable />
         </div>
 
         <div className="row" style={{ gap: 6 }}>
@@ -143,7 +143,7 @@ export function PriceSheet({
               <button type="button" aria-label="Menos peso" onClick={() => setGrams((g) => Math.max(10, g - (g > 300 ? 50 : 10)))}>
                 −
               </button>
-              <span className="num">{grams >= 1000 ? `${(grams / 1000).toString().replace('.', ',')} kg` : `${grams} g`}</span>
+              <NumberField value={grams} unit="g" label="Peso de cada um, em gramas" onCommit={(v) => setGrams(Math.max(1, Math.round(v)))} />
               <button type="button" aria-label="Mais peso" onClick={() => setGrams((g) => g + (g >= 300 ? 50 : 10))}>
                 +
               </button>

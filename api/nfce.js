@@ -48,8 +48,25 @@ export function parseNota(html) {
     const [d, mo, y] = dateM[1].split('/')
     date = `${y}-${mo}-${d}T${dateM[2] || '12:00'}`
   }
-  return { store, date, total: totalM ? num(decode(totalM[1])) : items.reduce((s, i) => s + (i.total || 0), 0), items }
+  const text = decode(html)
+  const discM = /Descontos?\s*R\$:?\s*([\d.,]+)/i.exec(text)
+  const paidM = /Valor a pagar\s*R\$:?\s*([\d.,]+)/i.exec(text)
+  return {
+    store,
+    date,
+    total: totalM ? num(decode(totalM[1])) : items.reduce((s, i) => s + (i.total || 0), 0),
+    discount: discM ? num(discM[1]) : null,
+    paid: paidM ? num(paidM[1]) : null,
+    items,
+  }
 }
+
+const get = (url, ms) =>
+  fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36', Accept: 'text/html' },
+    redirect: 'follow',
+    signal: AbortSignal.timeout(ms),
+  })
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
@@ -64,21 +81,25 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Esse link não é do site da Sefaz.' })
   }
   try {
-    const r = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36', Accept: 'text/html' },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(15000),
-    })
+    // a Sefaz às vezes demora ou só atende num dos protocolos: tenta de novo pelo outro
+    let r
+    try {
+      r = await get(url, 12000)
+    } catch {
+      const alt = new URL(url)
+      alt.protocol = url.protocol === 'https:' ? 'http:' : 'https:'
+      r = await get(alt, 15000)
+    }
     const buf = Buffer.from(await r.arrayBuffer())
     const ct = r.headers.get('content-type') || ''
     const html = /iso-8859-1|latin1|windows-1252/i.test(ct) || /charset=["']?iso-8859-1/i.test(buf.toString('latin1', 0, 2000)) ? buf.toString('latin1') : buf.toString('utf8')
     const nota = parseNota(html)
     if (!nota.items.length) {
       const debug = req.query.debug ? { sample: html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').slice(0, 6000) } : {}
-      return res.status(422).json({ error: 'Abri a nota mas não consegui ler os itens desse estado ainda.', host: url.hostname, status: r.status, ...debug })
+      return res.status(422).json({ error: 'A Sefaz abriu, mas não mostrou os itens. Plano B: abra o link da nota no Safari, selecione tudo, copie e cole o texto aqui.', host: url.hostname, status: r.status, ...debug })
     }
     return res.status(200).json(nota)
   } catch (e) {
-    return res.status(502).json({ error: 'O site da Sefaz não respondeu. Tente de novo em alguns minutos.', detail: String(e && e.message) })
+    return res.status(502).json({ error: 'O site da Sefaz não respondeu agora. Plano B: abra o link da nota no Safari, selecione tudo, copie e cole o texto aqui.', detail: String(e && e.message) })
   }
 }

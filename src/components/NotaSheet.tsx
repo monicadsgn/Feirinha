@@ -41,9 +41,12 @@ export function NotaSheet({ tripId, onClose, onDone }: { tripId?: Id; onClose: (
     try {
       const n = await fetchNota(text)
       setNota(n)
+      // o que foi marcado na compra que vai ser conferida ajuda a escolher o item
+      const trip = candidates[0]
+      const prefer = new Set(trip ? trip.lines.filter((l) => l.status === 'pego').map((l) => l.itemId) : [])
       setLines(
         n.items.map((i) => {
-          const m = matchProduct(db, i.name)
+          const m = matchProduct(db, i.name, prefer)
           // sacola do caixa não é item da despensa
           const skip = !m && /\bsacola|\bsacolas\b/i.test(i.name)
           return { productName: i.name, target: m?.id ?? (skip ? 'ignorar' : 'novo'), qty: i.qty, notaUnit: i.unit, total: i.total }

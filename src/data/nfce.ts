@@ -210,17 +210,25 @@ function nameVariants(name: string): string[] {
   return out
 }
 
-/** Acha o item da despensa pra um produto da nota. */
-export function matchProduct(db: DB, productName: string): Item | undefined {
+/**
+ * Acha o item da despensa pra um produto da nota. `prefer` = o que foi
+ * marcado nessa compra: ganha no empate e também vale pelo que está entre
+ * parênteses ("Carne moída (coxão mole)" é o "BOV.BIFE CX.MOLE" moído no
+ * açougue).
+ */
+export function matchProduct(db: DB, productName: string, prefer: Set<Id> = new Set()): Item | undefined {
   const key = normalize(productName)
   const items = Object.values(db.items).filter((i) => !i.deleted)
   const known = items.find((i) => i.aliases?.includes(key))
-  if (known) return known
+  // o nome já foi ligado antes: vale, a não ser que outro item dessa compra combine melhor
+  if (known && (!prefer.size || prefer.has(known.id))) return known
   const q = notaTokens(productName)
-  let best: Item | undefined
-  let bestScore = 0
+  let best: Item | undefined = known
+  let bestScore = known ? 15 : 0
   for (const it of items) {
-    for (const variant of nameVariants(it.name)) {
+    const inTrip = prefer.has(it.id)
+    const paren = inTrip ? [...it.name.matchAll(/\(([^)]+)\)/g)].map((m) => m[1]!) : []
+    for (const variant of [...nameVariants(it.name), ...paren]) {
       const all = notaTokens(variant)
       // embalagem é opcional ("SARD RALADA" serve pra "Sardinha em lata")
       const t = all.filter((w) => !CONTAINERS.has(w) || q.includes(w))
@@ -231,7 +239,7 @@ export function matchProduct(db: DB, productName: string): Item | undefined {
       // a nota diz "condensado"/"palha"/… e o item não: é outro produto
       if (q.some((x) => MODIFIERS.has(x) && !all.includes(x))) continue
       // mais palavras batendo vence; empate: palavras mais longas (mais específicas)
-      const score = hits.length * 10 + hits.join('').length / 10
+      const score = hits.length * 10 + hits.join('').length / 10 + (inTrip ? 5 : 0)
       if (score > bestScore) {
         best = it
         bestScore = score

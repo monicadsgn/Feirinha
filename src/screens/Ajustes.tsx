@@ -4,6 +4,7 @@ import { Sheet, confirmAction, embedded, toast } from '../components/ui'
 import { createCasa, inviteLink, leaveCasa, syncAvailable, syncNow, useSync } from '../data/sync'
 import { WEEKDAYS, calendarEvents, googleCalendarUrl, icsFile } from '../data/reminders'
 import { deleteShop, exportJSON, importJSON, resetAll, updateSettings, upsertShop, useDB } from '../data/store'
+import { nextFeira } from '../data/logic'
 
 export function Ajustes({ onClose }: { onClose: () => void }) {
   const db = useDB()
@@ -80,11 +81,24 @@ export function Ajustes({ onClose }: { onClose: () => void }) {
             </label>
             <label className="field">
               <span>Dia que cai</span>
-              <input
-                inputMode="numeric"
-                defaultValue={s.ticketDay}
-                onBlur={(e) => updateSettings({ ticketDay: Math.min(31, Math.max(1, parseInt(e.target.value) || 5)) })}
-              />
+              <select
+                value={s.ticketDay === 0 ? 'util' : 'dia'}
+                onChange={(e) => updateSettings({ ticketDay: e.target.value === 'util' ? 0 : s.ticketDay || 5 })}
+              >
+                <option value="util">Último dia útil do mês</option>
+                <option value="dia">Um dia fixo</option>
+              </select>
+              {s.ticketDay !== 0 && (
+                <input
+                  inputMode="numeric"
+                  defaultValue={s.ticketDay}
+                  aria-label="Dia do mês"
+                  onBlur={(e) => updateSettings({ ticketDay: Math.min(31, Math.max(1, parseInt(e.target.value) || 5)) })}
+                />
+              )}
+              <span className="small muted" style={{ fontWeight: 500 }}>
+                Próximo: {new Date(nextFeira(s.ticketDay)).toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })}
+              </span>
             </label>
           </div>
         </div>
@@ -172,8 +186,7 @@ export function Ajustes({ onClose }: { onClose: () => void }) {
         <div className="card stack">
           <h3>Lembretes</h3>
           <p className="small muted" style={{ margin: 0 }}>
-            Coloque 2 lembretes com alarme no calendário do celular: um na véspera da feira (dia {s.ticketDay === 1 ? 'último do mês' : s.ticketDay - 1}, às
-            19h) pra revisar a despensa, e um toda semana pra marcar o que acabou. Quando abrir o app, os avisos também aparecem no topo da
+            Coloque 2 lembretes com alarme no calendário do celular: {s.ticketDay === 0 ? 'um no último dia útil do mês, às 8h,' : `um na véspera da feira (dia ${s.ticketDay === 1 ? 'último do mês' : s.ticketDay - 1}, às 19h)`} pra revisar a despensa, e um toda semana pra marcar o que acabou. Quando abrir o app, os avisos também aparecem no topo da
             Despensa.
           </p>
           <label className="field">

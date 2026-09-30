@@ -112,7 +112,7 @@ export interface Settings {
   people: string[]
   /** Valor que cai no ticket por mês. 0 = não usa. */
   ticketMonthly: number
-  /** Dia do mês em que o ticket cai (e a feira costuma acontecer). */
+  /** Dia do mês em que o ticket cai (e a feira costuma acontecer). 0 = último dia útil. */
   ticketDay: number
   onboarded: boolean
   /** Última revisão completa da despensa. */

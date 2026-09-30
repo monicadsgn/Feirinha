@@ -144,8 +144,20 @@ export function daysUntilFeira(ticketDay: number, now = Date.now()): number {
   return Math.ceil((nextFeira(ticketDay, now) - now) / DAY)
 }
 
+/** Dia do ticket naquele mês. 0 = último dia útil (seg a sex). */
 function clampDay(y: number, m: number, day: number) {
-  return Math.min(day, new Date(y, m + 1, 0).getDate())
+  const last = new Date(y, m + 1, 0).getDate()
+  if (day === 0) {
+    let d = last
+    while ([0, 6].includes(new Date(y, m, d).getDay())) d--
+    return d
+  }
+  return Math.min(day, last)
+}
+
+/** "dia 5" ou "último dia útil". */
+export function ticketDayLabel(day: number): string {
+  return day === 0 ? 'último dia útil do mês' : `dia ${day}`
 }
 
 export function tripTotal(trip: Trip): { total: number; picked: number; unpriced: number; missing: number; extras: number } {

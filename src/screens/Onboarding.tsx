@@ -14,7 +14,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   const [me, setMe] = useDraft('cadastro:nome', prev.me)
   const [other, setOther] = useDraft('cadastro:outro', prev.people.find((p) => p !== prev.me) ?? '')
   const [ticket, setTicket] = useDraft('cadastro:ticket', prev.ticketMonthly ? prev.ticketMonthly.toFixed(2).replace('.', ',') : '')
-  const [day, setDay] = useDraft('cadastro:dia', String(prev.ticketDay || 5))
+  const [day, setDay] = useDraft('cadastro:dia', prev.ticketDay === 0 && prev.onboarded ? 'util' : String(prev.ticketDay || 5))
   const [pickedList, setPickedList] = useDraft<string[]>('cadastro:itens', () => SEED_ITEMS.filter((i) => i.origin === 'lista').map((i) => i.key))
   const picked = useMemo(() => new Set(pickedList), [pickedList])
   const setPicked = (fn: (p: Set<string>) => Set<string>) => setPickedList((a) => [...fn(new Set(a))])
@@ -40,7 +40,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         me: me.trim() || 'Eu',
         people: [me.trim() || 'Eu', other.trim()].filter(Boolean),
         ticketMonthly: parseFloat(ticket.replace(/\./g, '').replace(',', '.')) || 0,
-        ticketDay: Math.min(31, Math.max(1, parseInt(day) || 5)),
+        ticketDay: day === 'util' ? 0 : Math.min(31, Math.max(1, parseInt(day) || 5)),
       },
       [...picked],
     )
@@ -74,7 +74,11 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             </label>
             <label className="field">
               <span>Dia que o ticket cai</span>
-              <input inputMode="numeric" value={day} onChange={(e) => setDay(e.target.value)} />
+              <select value={day === 'util' ? 'util' : 'dia'} onChange={(e) => setDay(e.target.value === 'util' ? 'util' : '5')}>
+                <option value="dia">Dia fixo</option>
+                <option value="util">Último dia útil</option>
+              </select>
+              {day !== 'util' && <input inputMode="numeric" value={day} onChange={(e) => setDay(e.target.value)} aria-label="Dia do mês" />}
             </label>
           </div>
           <p className="muted small" style={{ margin: 0 }}>

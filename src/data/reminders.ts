@@ -108,13 +108,23 @@ function nextWeekday(weekday: number, hour: number): Date {
   return d
 }
 
-/** Véspera da feira: dia anterior ao dia do ticket, às 19h. */
-function feiraEve(ticketDay: number): { first: Date; monthDay: number } {
+/** Véspera da feira: dia anterior ao dia do ticket, às 19h. Último dia útil: no próprio dia, às 8h. */
+function feiraEve(ticketDay: number): { first: Date; rrule: string } {
+  if (ticketDay === 0) {
+    // hoje, se hoje for o dia e ainda não passou das 8h; senão o próximo
+    let first = new Date(cycleStart(0))
+    first.setHours(8, 0, 0, 0)
+    if (first.getTime() < Date.now()) {
+      first = new Date(nextFeira(0))
+      first.setHours(8, 0, 0, 0)
+    }
+    return { first, rrule: 'FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1' }
+  }
   const monthDay = ticketDay === 1 ? -1 : ticketDay - 1
   const d = new Date(nextFeira(ticketDay) - DAY)
   d.setHours(19, 0, 0, 0)
   if (d.getTime() < Date.now()) d.setMonth(d.getMonth() + 1)
-  return { first: d, monthDay }
+  return { first: d, rrule: `FREQ=MONTHLY;BYMONTHDAY=${monthDay}` }
 }
 
 export interface CalEvent {
@@ -130,10 +140,10 @@ export function calendarEvents(db: DB, appUrl: string): CalEvent[] {
   const wd = s.checkWeekday ?? 0
   return [
     {
-      title: '🧺 Amanhã tem feira: revisar a despensa',
+      title: s.ticketDay === 0 ? '🧺 Hoje cai o ticket: revisar a despensa' : '🧺 Amanhã tem feira: revisar a despensa',
       details: `Abrir o Feirinha, tocar em “Revisar despensa” e deixar a lista pronta. ${appUrl}`,
       start: eve.first,
-      rrule: `FREQ=MONTHLY;BYMONTHDAY=${eve.monthDay}`,
+      rrule: eve.rrule,
     },
     {
       title: '🫙 Feirinha: acabou alguma coisa?',
